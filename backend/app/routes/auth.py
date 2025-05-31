@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import User, Message, KeySession
-from schemas import UserCreate, UserLogin, MessageCreate
-from security import generate_rsa_keys, generate_dh_keys, hash_password, create_access_token, verify_password, \
+from app.database import SessionLocal
+from app.models import User, Message, KeySession
+from app.schemas import UserCreate, UserLogin, MessageCreate
+from app.security import generate_rsa_keys, generate_dh_keys, hash_password, create_access_token, verify_password, \
     SECRET_KEY, ALGORITHM, sign_data_with_rsa, verify_signature_with_rsa
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from typing import Optional, List
-from key_management import (
+from app.key_management import (
     export_private_key, load_private_key, BACKUP_DIR,
     initiate_session, accept_session, complete_session,
     encrypt_message_with_session, decrypt_message_with_session,

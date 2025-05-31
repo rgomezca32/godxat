@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import User, Message, KeySession
-from schemas import MessageCreate, EphemeralMessage
-from key_management import (
+from app.database import SessionLocal
+from app.models import User, Message, KeySession
+from app.schemas import MessageCreate, EphemeralMessage
+from app.key_management import (
     encrypt_message_with_session, decrypt_message_with_session,
     load_ephemeral_keys, complete_session, load_private_key
 )
