@@ -7,7 +7,7 @@ from app.key_management import (
     encrypt_message_with_session, decrypt_message_with_session,
     load_ephemeral_keys, complete_session, load_private_key
 )
-from routes.auth import get_current_user
+from app.routes.auth import get_current_user
 from datetime import datetime
 import json
 
