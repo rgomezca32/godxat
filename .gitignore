@@ -1,0 +1,7 @@
+# Ignorar todo
+*
+
+# Excepto estos:
+!.gitignore
+!frontend/
+!frontend/**/*
