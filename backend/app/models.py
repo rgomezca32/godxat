@@ -2,7 +2,7 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, T
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base  # ✅ Esto es lo correcto
+from app.database import Base
 
 class User(Base):
     __tablename__ = "users"

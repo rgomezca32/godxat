@@ -9,7 +9,7 @@ import json
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
-from security import (
+from app.security import (
     generate_ephemeral_dh_keys,
     generate_shared_secret,
     sign_data_with_rsa,
