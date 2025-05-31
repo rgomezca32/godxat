@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 # Importar rutas
-from routes import auth, chat
+from app.routes import auth, chat
 
 # Cargar variables de entorno
 load_dotenv()
