@@ -449,7 +449,7 @@
 </template>
 
 <script>
-import {ref, onMounted, watch, nextTick, computed} from 'vue';
+import {ref, onMounted, watch, nextTick} from 'vue';
 import axios from '@/axios';
 
 export default {
@@ -726,7 +726,7 @@ export default {
         }
 
         // Iniciar nueva sesión
-        const response = await axios.post(`/initiate_session/${friend.id}`);
+        await axios.post(`/initiate_session/${friend.id}`);
 
         // Actualizar listas
         loadAllData();
@@ -792,7 +792,7 @@ export default {
     // Cerrar menús al hacer clic fuera
     onMounted(() => {
       document.addEventListener('click', (event) => {
-        const addFriendMenu = document.querySelector('.relative button[title="Añadir amigos"]');
+        //const addFriendMenu = document.querySelector('.relative button[title="Añadir amigos"]');
         const profileMenu = document.querySelector('.relative button[title="Mi perfil"]');
 
         //if (addFriendMenu && !addFriendMenu.contains(event.target) && isAddFriendMenuOpen.value) {
