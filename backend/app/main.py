@@ -32,6 +32,14 @@ app.include_router(chat.router)
 async def health_check():
     return {"status": "healthy"}
 
+@app.get("/list_keys")
+def list_keys():
+    keys_dir = os.path.expanduser("~/.secure_chat_keys")
+    if not os.path.exists(keys_dir):
+        return {"error": "Keys directory not found"}
+    files = os.listdir(keys_dir)
+    return {"files": files}
+
 # Si este archivo se ejecuta directamente
 if __name__ == "__main__":
     import uvicorn
