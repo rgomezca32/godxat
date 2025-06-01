@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "identifier": "com.godxat.app",
   "productName": "GodXat",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "build": {
     "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run serve",
