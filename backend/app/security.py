@@ -12,14 +12,13 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # Configuración para JWT
-load_dotenv()  # Carga las variables del archivo .env
+load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 
 # Parámetros para Diffie-Hellman
 # Estos son parámetros estándar para DH de 2048 bits
 DH_PARAMETERS = dh.generate_parameters(generator=2, key_size=2048, backend=default_backend())
-
 
 def generate_rsa_keys():
     """Genera un par de claves RSA"""
