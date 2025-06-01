@@ -68,14 +68,7 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU4OTFCMEVBQTM1NjM3NTQKUldSVU4xYWo2ckNSNkNXUHBQWnV0MGlyazg3dHdzSlhJTXZ0aHUxRmovSHpqVVV5NWJnR3V0UWIK"
     },
     "fs": {
-      "scope": ["$APPDATA/*", "$APPDATA/godxat/*"]
-    },
-    "http": {
-      "all": true,
-      "request": true
-    },
-    "dialog": {
-      "all": true
+      "requireLiteralLeadingDot": false
     }
   }
 }

@@ -5,6 +5,9 @@ backend/app/*.pyc
 backend/.venv/
 backend/.env
 
+# Ignorar archivos de entorno
+backend/.env
+
 updates/__pycache__/
 updates/app/__pycache__/
 updates/app/*.pyc
@@ -22,8 +25,17 @@ frontend/src-tauri/target/
 frontend/src-tauri/.env
 frontend/src-tauri/tauri.private.key
 
-
 # Archivos comunes
 *.py[cod]
 *.log
 .DS_Store
+
+# Ignorar configuraciones de JetBrains IDEs
+.idea/
+
+# Ignorar archivos de entorno y configuración sensible
+backend/app/.env
+backend/.env
+.venv/
+backend/app/.venv/
+backend/.venv/
