@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "fs-read-home",
+  "description": "Permite lectura y escritura completa dentro de $HOME",
+  "permissions": [
+    "fs:allow-home-read",
+    "fs:allow-home-write",
+    "fs:allow-read",
+    "fs:allow-write",
+    "fs:allow-mkdir",
+    "fs:allow-create",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:create-app-specific-dirs",
+    "dialog:allow-message"
+  ]
+}

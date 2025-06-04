@@ -88,40 +88,49 @@
   </div>
 </template>
 
-<script setup>
+<script>
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ref } from 'vue';
-import axios from '@/axios';
-import { onMounted } from 'vue'
-const router = useRouter()
-// Estado del formulario
-const username = ref('');
-const password = ref('');
-const rememberMe = ref(false);
+import authService from '@/services/auth_service'
 
-onMounted(() => {
-  if (localStorage.getItem('access_token')) {
-    router.push('/message')
-  }
-})
+export default {
+  setup() {
+    const router = useRouter()
+    const username = ref('')
+    const password = ref('')
+    const rememberMe = ref(false)
 
-// Función de inicio de sesión
-const login = async () => {
-  try {
-    const response = await axios.post('/login/', {
-      username: username.value,
-      password: password.value
+    onMounted(() => {
+      if (localStorage.getItem('token')) {
+        router.push('/message')
+      }
     })
-    localStorage.setItem('access_token', response.data.access_token)
-    router.push('/message')
-  } catch (error) {
-    // Verifica si existe error.response y error.response.data.detail
-    const message = error.response?.data?.detail || error.message || 'Error desconocido'
-    console.error('Error al iniciar sesión:', message)
-    alert(message)
+
+    const login = async () => {
+      try {
+        const response = await authService.login(
+          username.value,
+          password.value
+        )
+        localStorage.setItem('token', response.token)
+        router.push('/message')
+      } catch (error) {
+        const message = error.response?.data?.detail || error.message || 'Error desconocido'
+        console.error('Error al iniciar sesión:', message)
+        alert(message)
+      }
+    }
+
+    return {
+      username,
+      password,
+      rememberMe,
+      login
+    }
   }
 }
 </script>
+
 
 <style scoped>
 </style>

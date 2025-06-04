@@ -27,7 +27,7 @@ const router = createRouter({
 
 // 🔒 Middleware de navegación
 router.beforeEach((to, from, next) => {
-  const isAuthenticated = !!localStorage.getItem('access_token')
+  const isAuthenticated = !!localStorage.getItem('token')
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     next('/') // redirige al inicio si no hay token

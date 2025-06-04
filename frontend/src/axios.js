@@ -6,7 +6,7 @@ const instance = axios.create({
 
 // Añadir token a cada request
 instance.interceptors.request.use(config => {
-  const token = localStorage.getItem('access_token')
+  const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -19,7 +19,7 @@ instance.interceptors.response.use(
   async error => {
     if (error.response && error.response.status === 401) {
       // Aquí podrías redirigir al login o intentar refrescar token
-      localStorage.removeItem('access_token')
+      localStorage.removeItem('token')
       window.location.href = '/'  // redirige a login
     }
     return Promise.reject(error)

@@ -16,59 +16,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Configuración específica para Linux (Ubuntu )
-      - name: Build AppImage in Ubuntu 20.04 Docker container
+      - name: Install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-latest'
         run: |
-          # Construir la imagen Docker
-          docker build -t tauri-builder:20.04 -f Dockerfile.build .
-          
-          # Ejecutar la compilación dentro del contenedor
-          docker run --rm \
-            -v ${{ github.workspace }}:/app \
-            -e TAURI_SIGNING_PRIVATE_KEY="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" \
-            -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" \
-            tauri-builder:20.04 \
-            bash -c "cd frontend && npm ci && npm run tauri:build"
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      # Configuración para macOS
-      - name: Install dependencies (macOS only)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          # Tus comandos para macOS
-
-      # Configuración para Windows
-      - name: Install dependencies (Windows only)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          # Tus comandos para Windows
-
-      # Pasos comunes para macOS y Windows
-      - name: Setup Node (macOS and Windows)
-        if: matrix.platform != 'ubuntu-latest'
+      - name: Setup Node
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - name: Setup Rust (macOS and Windows)
-        if: matrix.platform != 'ubuntu-latest'
+      - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           profile: minimal
 
-      - name: Install frontend dependencies (macOS and Windows)
-        if: matrix.platform != 'ubuntu-latest'
+      - name: Install frontend dependencies
         run: |
           cd frontend
           npm ci
 
-      - name: Install Tauri CLI (macOS and Windows)
-        if: matrix.platform != 'ubuntu-latest'
+      # Instalar específicamente Tauri CLI 2.5.0
+      - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli@2.5.0
 
-      - name: Build the app (macOS and Windows)
-        if: matrix.platform != 'ubuntu-latest'
+      - name: Build the app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -76,14 +50,12 @@ jobs:
           cd frontend
           npm run tauri:build
 
-      # Subir artefactos (común para todas las plataformas)
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: artifacts-${{ matrix.platform }}
           path: |
             frontend/src-tauri/target/release/bundle/msi/*.msi
-            frontend/src-tauri/target/release/bundle/nsis/*.exe
             frontend/src-tauri/target/release/bundle/dmg/*.dmg
             frontend/src-tauri/target/release/bundle/appimage/*.AppImage
 
@@ -104,7 +76,6 @@ jobs:
         with:
           files: |
             artifacts/artifacts-windows-latest/**/*.msi
-            artifacts/artifacts-windows-latest/**/*.exe
             artifacts/artifacts-macos-latest/**/*.dmg
             artifacts/artifacts-ubuntu-latest/**/*.AppImage
           draft: true

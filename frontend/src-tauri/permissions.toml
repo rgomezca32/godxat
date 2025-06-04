@@ -1,0 +1,8 @@
+# src-tauri/permissions.toml
+[fs]
+read = true
+write = true
+
+[window]
+show = true
+set_title = true

@@ -128,90 +128,111 @@
   </div>
 </template>
 
-<script setup>
+<script>
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-const router = useRouter();
-import axios from '@/axios';
-// Estado del formulario
-const username = ref('');
-const password = ref('');
-const confirmPassword = ref('');
-const acceptTerms = ref(false);
+import authService from '@/services/auth_service';
 
-// Computed para validar la fortaleza de la contraseña
-const passwordStrength = computed(() => {
-  if (!password.value) return 0;
+// Crear una instancia del servicio de autenticación
 
-  let strength = 0;
+export default {
+  name: 'RegisterView',
+  setup() {
+    const router = useRouter();
 
-  // Longitud mínima
-  if (password.value.length >= 8) strength++;
+    // Estado del formulario
+    const username = ref('');
+    const password = ref('');
+    const confirmPassword = ref('');
+    const acceptTerms = ref(false);
 
-  // Contiene números y letras
-  if (/(?=.*[a-zA-Z])(?=.*[0-9])/.test(password.value)) strength++;
+    // Computed para validar la fortaleza de la contraseña
+    const passwordStrength = computed(() => {
+      if (!password.value) return 0;
 
-  // Contiene caracteres especiales
-  if (/(?=.*[!@#$%^&*])/.test(password.value)) strength++;
+      let strength = 0;
 
-  return strength;
-});
+      // Longitud mínima
+      if (password.value.length >= 8) strength++;
 
-// Texto descriptivo de la fortaleza de la contraseña
-const passwordStrengthText = computed(() => {
-  switch (passwordStrength.value) {
-    case 0:
-      return 'Muy débil';
-    case 1:
-      return 'Débil';
-    case 2:
-      return 'Moderada';
-    case 3:
-      return 'Fuerte';
-    default:
-      return '';
-  }
-});
+      // Contiene números y letras
+      if (/(?=.*[a-zA-Z])(?=.*[0-9])/.test(password.value)) strength++;
 
-// Validación del formulario
-const isFormValid = computed(() => {
-  return (
-    username.value.trim() !== '' &&
-    password.value.length >= 8 &&
-    password.value === confirmPassword.value &&
-    acceptTerms.value
-  );
-});
+      // Contiene caracteres especiales
+      if (/(?=.*[!@#$%^&*])/.test(password.value)) strength++;
 
-// Función de registro
-const register = async () => {
-  if (!isFormValid.value) {
-    alert('Por favor, completa todos los campos correctamente.');
-    return;
-  }
-
-  try {
-    const response = await axios.post('/register/', {
-      username: username.value,
-      password: password.value
+      return strength;
     });
 
-    console.log('Usuario registrado:', response.data);
-    alert('Usuario registrado exitosamente. Redirigiendo...');
+    // Texto descriptivo de la fortaleza de la contraseña
+    const passwordStrengthText = computed(() => {
+      switch (passwordStrength.value) {
+        case 0:
+          return 'Muy débil';
+        case 1:
+          return 'Débil';
+        case 2:
+          return 'Moderada';
+        case 3:
+          return 'Fuerte';
+        default:
+          return '';
+      }
+    });
 
-    setTimeout(() => {
-      router.push("/");
-    }, 1000);
+    // Validación del formulario
+    const isFormValid = computed(() => {
+      return (
+          username.value.trim() !== '' &&
+          password.value.length >= 8 &&
+          password.value === confirmPassword.value &&
+          acceptTerms.value
+      );
+    });
 
-  } catch (error) {
-    if (error.response) {
-      console.error('Error del servidor:', error.response.data.detail);
-      alert(`Error: ${error.response.data.detail}`);
-    } else {
-      console.error('Error de red:', error.message);
-      alert('No se pudo conectar con el servidor.');
-    }
+    // Función de registro
+    const register = async () => {
+      if (!isFormValid.value) {
+        alert('Por favor, completa todos los campos correctamente.');
+        return;
+      }
+
+      try {
+        // Usar el servicio de autenticación para registrar al usuario
+        // Este servicio generará las claves localmente y enviará solo las públicas al servidor
+        const response = await authService.register(
+            username.value,
+            password.value
+        );
+
+        console.log('Usuario registrado:', response);
+        alert('Usuario registrado exitosamente. Redirigiendo...');
+
+        setTimeout(() => {
+          router.push("/");
+        }, 1000);
+
+      } catch (error) {
+        if (error.response) {
+          console.error('Error del servidor:', error.response.data.detail);
+          alert(`Error: ${error.response.data.detail}`);
+        } else {
+          console.error('Error de red:', error.message);
+          alert('No se pudo conectar con el servidor.');
+        }
+      }
+    };
+
+    return {
+      username,
+      password,
+      confirmPassword,
+      acceptTerms,
+      passwordStrength,
+      passwordStrengthText,
+      isFormValid,
+      register
+    };
   }
-};
-
+}
 </script>

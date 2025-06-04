@@ -319,27 +319,43 @@
           </div>
         </form>
       </template>
-      <div v-else class="flex items-center justify-center h-full">
-        <p class="text-gray-500">Selecciona un chat para comenzar</p>
+
+      <!-- Mensaje de bienvenida cuando no hay chat seleccionado -->
+      <div v-else class="flex flex-col items-center justify-center h-full text-center p-8">
+        <div class="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd" />
+          </svg>
+        </div>
+        <h2 class="text-xl font-semibold text-gray-800 mb-2">Bienvenido a GodXat</h2>
+        <p class="text-gray-600 max-w-md">
+          Selecciona una conversación existente o inicia una nueva para comenzar a chatear de forma segura.
+        </p>
       </div>
     </div>
 
-    <!-- Vista móvil del chat -->
-    <div v-if="isMobile && selectedUser" class="fixed inset-0 z-50 md:hidden bg-white flex flex-col">
+    <!-- Área de chat (móvil) -->
+    <div
+      v-if="isMobile && selectedUser"
+      class="fixed inset-0 bg-white z-50 flex flex-col"
+    >
       <!-- Cabecera del chat móvil -->
-      <div class="flex items-center p-4 border-b border-gray-200 bg-white">
-        <button @click="selectedUser = null" class="mr-2 p-1 rounded-full hover:bg-gray-100">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-        </button>
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
         <div class="flex items-center">
-          <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+          <button
+            @click="selectedUser = null"
+            class="p-2 mr-2 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+          </button>
+          <div class="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
             <img :src="selectedUser.avatar" :alt="selectedUser.name" class="h-full w-full object-cover" />
           </div>
-          <div class="ml-2">
-            <h2 class="text-base font-semibold">{{ selectedUser.name }}</h2>
+          <div class="ml-3">
+            <h2 class="text-lg font-semibold">{{ selectedUser.name }}</h2>
             <!-- Indicador de estado de sesión -->
             <div v-if="selectedUser.sessionStatus === 'active'" class="flex items-center text-xs text-green-600">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -355,17 +371,19 @@
             </div>
           </div>
         </div>
-        <!-- Botón para eliminar sesión y mensajes (móvil) -->
-        <button
-          v-if="selectedUser.sessionStatus === 'active'"
-          @click="confirmDeleteSession"
-          class="ml-auto p-2 rounded-full hover:bg-red-100 transition-colors text-red-500"
-          title="Eliminar conversación"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-          </svg>
-        </button>
+        <div>
+          <!-- Botón para eliminar sesión y mensajes (móvil) -->
+          <button
+            v-if="selectedUser.sessionStatus === 'active'"
+            @click="confirmDeleteSession"
+            class="p-2 rounded-full hover:bg-red-100 transition-colors text-red-500"
+            title="Eliminar conversación"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <!-- Mensajes (móvil) -->
@@ -395,13 +413,13 @@
       </div>
 
       <!-- Entrada de mensaje (móvil) -->
-      <form @submit.prevent="sendMessage" class="p-3 border-t border-gray-200 bg-white">
+      <form @submit.prevent="sendMessage" class="p-4 border-t border-gray-200 bg-white">
         <div class="flex space-x-2">
           <input
             v-model="newMessage"
             type="text"
             placeholder="Escribe un mensaje..."
-            class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             :disabled="selectedUser.sessionStatus === 'pending'"
           />
           <button
@@ -423,22 +441,23 @@
     </div>
 
     <!-- Modal de confirmación para eliminar sesión -->
-    <div v-if="showDeleteConfirmation" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+    <div v-if="showDeleteConfirmation" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-6 max-w-sm mx-4">
         <h3 class="text-lg font-medium text-gray-900 mb-4">Eliminar conversación</h3>
         <p class="text-gray-600 mb-6">
-          ¿Estás seguro de que deseas eliminar esta conversación? Se borrarán todos los mensajes y la sesión con este usuario. Esta acción no se puede deshacer.
+          ¿Estás seguro de que deseas eliminar esta conversación? Esta acción no se puede deshacer y se perderán todos
+          los mensajes.
         </p>
         <div class="flex justify-end space-x-3">
           <button
-            @click="showDeleteConfirmation = false"
-            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+              @click="showDeleteConfirmation = false"
+              class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
           >
             Cancelar
           </button>
           <button
-            @click="deleteSession"
-            class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+              @click="deleteSession"
+              class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
           >
             Eliminar
           </button>
@@ -449,224 +468,59 @@
 </template>
 
 <script>
-import {ref, onMounted, watch, nextTick} from 'vue';
-import axios from '@/axios';
+import { ref, onMounted, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
+import authService from '@/services/auth_service'
+import messageService from '@/services/message_service';
 
 export default {
+  name: 'MessageView',
   setup() {
-    const selectedUser = ref(null);
-    const messages = ref([]);
-    const newMessage = ref('');
-    const messagesContainer = ref(null);
-    const mobileMessagesContainer = ref(null);
+    const router = useRouter();
+
+    // Estado de la interfaz
     const isAddFriendMenuOpen = ref(false);
     const isProfileMenuOpen = ref(false);
-    const newFriendName = ref("");
+    const newFriendName = ref('');
     const potentialFriends = ref([]);
+    const selectedUser = ref(null);
+    const newMessage = ref('');
+    const messages = ref([]);
+    const messagesContainer = ref(null);
+    const activeUsers = ref([]);
     const incomingPendingSessions = ref([]);
     const outgoingPendingSessions = ref([]);
-    const activeUsers = ref([]);
-    const isMobile = ref(window.innerWidth < 768);
-    const showDeleteConfirmation = ref(false);
 
-    // Detectar cambios en el tamaño de la ventana
-    window.addEventListener('resize', () => {
-      isMobile.value = window.innerWidth < 768;
+    // Cargar datos al montar el componente
+    onMounted(async () => {
+      try {
+        // Verificar si hay token de autenticación
+        const token = localStorage.getItem('token');
+        if (!token) {
+          router.push('/');
+          return;
+        }
+        messageService.initMessageService();
+
+        await authService.checkAndCompleteSessions();
+
+        // Cargar sesiones pendientes
+        await loadPendingSessions();
+
+        // Cargar conversaciones activas
+        await loadConversations();
+
+      } catch (error) {
+        console.error('Error al cargar datos iniciales:', error);
+        if (error.response?.status === 401) {
+          // Token expirado o inválido
+          localStorage.removeItem('token');
+          router.push('/');
+        }
+      }
     });
 
-    // Cargar sesiones pendientes recibidas
-    const loadIncomingPendingSessions = async () => {
-      try {
-        const response = await axios.get('/pending_sessions/');
-        incomingPendingSessions.value = response.data.pending_sessions;
-      } catch (error) {
-        console.error('Error al cargar sesiones pendientes:', error);
-      }
-    };
-
-    // Cargar sesiones pendientes enviadas
-    const loadOutgoingPendingSessions = async () => {
-      try {
-        const response = await axios.get('/outgoing_pending_sessions/');
-        outgoingPendingSessions.value = response.data.pending_sessions;
-      } catch (error) {
-        console.error('Error al cargar sesiones pendientes enviadas:', error);
-      }
-    };
-
-    // Cargar conversaciones activas
-    const loadActiveConversations = async () => {
-      try {
-        const response = await axios.get('/get_conversations_ephemeral/');
-        activeUsers.value = response.data.conversations.map(conv => ({
-          id: conv.peer_id,
-          name: conv.peer_username,
-          avatar: `/placeholder.svg?height=40&width=40&text=${conv.peer_username.charAt(0).toUpperCase()}`,
-          lastMessage: conv.last_message || 'No hay mensajes',
-          lastMessageTime: conv.last_message_time ? new Date(conv.last_message_time).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          }) : '',
-          unread: 0,
-          sessionId: conv.session_id,
-          sessionStatus: 'active'
-        }));
-      } catch (error) {
-        console.error('Error al cargar conversaciones activas:', error);
-      }
-    };
-
-    // Cargar todos los datos
-    const loadAllData = () => {
-      loadIncomingPendingSessions();
-      loadOutgoingPendingSessions();
-      loadActiveConversations();
-    };
-
-    // Seleccionar usuario para chat
-    const selectUser = async (user) => {
-      selectedUser.value = user;
-      await loadMessages();
-
-      // Scroll al final de los mensajes
-      nextTick(() => {
-        if (messagesContainer.value) {
-          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-        }
-        if (mobileMessagesContainer.value) {
-          mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
-        }
-      });
-    };
-
-    // Cargar mensajes
-    const loadMessages = async () => {
-      if (!selectedUser.value) return;
-
-      try {
-        // Usar el nuevo endpoint para obtener todos los mensajes con el usuario
-        const response = await axios.get(`/get_all_messages_with_user/${selectedUser.value.id}`);
-
-        messages.value = response.data.messages.map(msg => ({
-          id: msg.id,
-          text: msg.message,
-          sender: msg.sender_id === selectedUser.value.id ? 'them' : 'me',
-          timestamp: new Date(msg.created_at).toLocaleString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            day: '2-digit',
-            month: '2-digit',
-            year: '2-digit'
-          })
-        }));
-      } catch (error) {
-        console.error('Error al cargar mensajes:', error);
-      }
-    };
-
-    // Enviar mensaje
-    const sendMessage = async () => {
-      if (!newMessage.value.trim() || !selectedUser.value || selectedUser.value.sessionStatus !== 'active') return;
-
-      try {
-        await axios.post('/send_message_ephemeral/', {
-          session_id: selectedUser.value.sessionId,
-          message: newMessage.value
-        });
-
-        // Recargar mensajes después de enviar
-        await loadMessages();
-        newMessage.value = '';
-
-        // Scroll al final de los mensajes
-        nextTick(() => {
-          if (messagesContainer.value) {
-            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-          }
-          if (mobileMessagesContainer.value) {
-            mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
-          }
-        });
-      } catch (error) {
-        console.error('Error al enviar mensaje:', error);
-        alert('Error al enviar mensaje. Por favor, intenta de nuevo.');
-      }
-    };
-
-    // Aceptar sesión
-    const acceptSession = async (sessionId, initiatorId) => {
-      try {
-        await axios.post(`/accept_session/${sessionId}`);
-
-        // Actualizar listas
-        loadAllData();
-
-        // Si el usuario ya estaba seleccionado, actualizar su estado
-        if (selectedUser.value && selectedUser.value.id === initiatorId) {
-          selectedUser.value.sessionStatus = 'active';
-          selectedUser.value.sessionId = sessionId;
-        }
-      } catch (error) {
-        console.error('Error al aceptar sesión:', error);
-        alert('Error al aceptar la sesión. Por favor, intenta de nuevo.');
-      }
-    };
-
-    // Rechazar sesión
-    const rejectSession = async (sessionId) => {
-      try {
-        await axios.post(`/reject_session/${sessionId}`);
-
-        // Actualizar lista de sesiones pendientes
-        loadIncomingPendingSessions();
-      } catch (error) {
-        console.error('Error al rechazar sesión:', error);
-        alert('Error al rechazar la sesión. Por favor, intenta de nuevo.');
-      }
-    };
-
-    // Cancelar sesión pendiente enviada
-    const cancelSession = async (sessionId) => {
-      try {
-        await axios.post(`/cancel_session/${sessionId}`);
-
-        // Actualizar lista de sesiones pendientes enviadas
-        loadOutgoingPendingSessions();
-      } catch (error) {
-        console.error('Error al cancelar sesión:', error);
-        alert('Error al cancelar la sesión. Por favor, intenta de nuevo.');
-      }
-    };
-
-    // Confirmar eliminación de sesión
-    const confirmDeleteSession = () => {
-      showDeleteConfirmation.value = true;
-    };
-
-    // Eliminar sesión y mensajes
-    const deleteSession = async () => {
-      if (!selectedUser.value || !selectedUser.value.sessionId) {
-        showDeleteConfirmation.value = false;
-        return;
-      }
-
-      try {
-        await axios.delete(`/delete_session/${selectedUser.value.sessionId}`);
-
-        // Cerrar modal
-        showDeleteConfirmation.value = false;
-
-        // Actualizar listas y cerrar chat
-        loadAllData();
-        selectedUser.value = null;
-      } catch (error) {
-        console.error('Error al eliminar sesión:', error);
-        alert('Error al eliminar la conversación. Por favor, intenta de nuevo.');
-        showDeleteConfirmation.value = false;
-      }
-    };
-
-    // Alternar menú de añadir amigos
+    // Funciones para menús desplegables
     const toggleAddFriendMenu = () => {
       isAddFriendMenuOpen.value = !isAddFriendMenuOpen.value;
       if (isAddFriendMenuOpen.value) {
@@ -674,7 +528,6 @@ export default {
       }
     };
 
-    // Alternar menú de perfil
     const toggleProfileMenu = () => {
       isProfileMenuOpen.value = !isProfileMenuOpen.value;
       if (isProfileMenuOpen.value) {
@@ -682,160 +535,291 @@ export default {
       }
     };
 
-    // Buscar amigos
+    // Función para buscar amigos
     const addFriend = async () => {
       if (!newFriendName.value.trim()) return;
 
       try {
-        const response = await axios.get(`/search_user/${newFriendName.value}`);
-        potentialFriends.value = response.data.users.map(user => ({
-          ...user,
-          avatar: `/placeholder.svg?height=40&width=40&text=${user.username.charAt(0).toUpperCase()}`
-        }));
+        const response = await authService.searchUser(newFriendName.value);
+
+        // Obtener el usuario actual del localStorage (puede ser JSON string)
+        const currentUserRaw = localStorage.getItem("currentUser");
+        const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+
+        // Filtrar el usuario actual de la lista
+        potentialFriends.value = (response.users || []).filter(
+          user => user.username !== currentUser?.username
+        );
       } catch (error) {
         console.error('Error al buscar usuarios:', error);
+        alert('No se pudo buscar usuarios. Inténtalo de nuevo.');
       }
     };
 
-    // Seleccionar amigo de la lista
+    // Función para seleccionar un amigo de la lista
     const selectFriendFromList = async (friend) => {
       try {
-        // Verificar si ya existe una sesión con este usuario
-        const existingUser = activeUsers.value.find(u => u.id === friend.id);
-        if (existingUser) {
-          // Ya existe una sesión activa, seleccionarla
-          selectUser(existingUser);
-          isAddFriendMenuOpen.value = false;
-          return;
-        }
+        // Iniciar una sesión con el usuario seleccionado
+        await authService.initiateSession(friend.id);
 
-        // Verificar si ya hay una sesión pendiente enviada a este usuario
-        const pendingOutgoing = outgoingPendingSessions.value.find(s => s.receiver_id === friend.id);
-        if (pendingOutgoing) {
-          alert('Ya has enviado una solicitud de sesión a este usuario.');
-          isAddFriendMenuOpen.value = false;
-          return;
-        }
+        // Recargar sesiones pendientes
+        await loadPendingSessions();
 
-        // Verificar si ya hay una sesión pendiente recibida de este usuario
-        const pendingIncoming = incomingPendingSessions.value.find(s => s.initiator_id === friend.id);
-        if (pendingIncoming) {
-          alert('Este usuario ya te ha enviado una solicitud de sesión. Revisa tus solicitudes pendientes.');
-          isAddFriendMenuOpen.value = false;
-          return;
-        }
-
-        // Iniciar nueva sesión
-        await axios.post(`/initiate_session/${friend.id}`);
-
-        // Actualizar listas
-        loadAllData();
-
-        // Cerrar menú
+        // Cerrar el menú
         isAddFriendMenuOpen.value = false;
         newFriendName.value = '';
         potentialFriends.value = [];
 
-        // Mostrar mensaje de éxito
-        alert(`Solicitud de sesión enviada a ${friend.username}. Esperando aceptación.`);
+        alert(`Se ha enviado una solicitud de chat a ${friend.username}`);
       } catch (error) {
         console.error('Error al iniciar sesión:', error);
-        if (error.response && error.response.data && error.response.data.detail) {
-          alert(error.response.data.detail);
-        } else {
-          alert('Error al iniciar sesión. Por favor, intenta de nuevo.');
-        }
+        alert('No se pudo iniciar la sesión. Inténtalo de nuevo.');
       }
     };
 
-    // Ver perfil
-    const viewProfile = () => {
-      isProfileMenuOpen.value = false;
-      // Implementar vista de perfil
-    };
-
-    // Cerrar sesión
-    const logout = async () => {
+    // Función para cargar sesiones pendientes
+    const loadPendingSessions = async () => {
       try {
-        // Eliminar token de autenticación
-        localStorage.removeItem('access_token');
-        // Redirigir a la página de inicio de sesión
-        window.location.href = '/';
+        const pendingSessions = await authService.getPendingSessions();
+        const outPendingSessions = await  authService.getOutComingPendingSessions();
+
+        console.log(pendingSessions)
+        console.log(outPendingSessions)
+
+        // Separar sesiones pendientes entrantes y salientes
+        incomingPendingSessions.value = pendingSessions.pending_sessions
+
+        outgoingPendingSessions.value = outPendingSessions.out_pending_sessions
       } catch (error) {
-        console.error('Error al cerrar sesión:', error);
+        console.error('Error al cargar sesiones pendientes:', error);
       }
     };
 
-    // Cargar datos al montar el componente
-    onMounted(() => {
-      loadAllData();
+    // Función para cargar conversaciones activas
+    const loadConversations = async () => {
+      try {
+        const conversations = await messageService.getConversations();
 
-      // Configurar intervalo para actualizar datos
-      const intervalId = setInterval(loadAllData, 10000);
+        // Transformar las conversaciones al formato esperado por la UI
+        activeUsers.value = conversations.conversations.map(conv => ({
+          id: conv.peer_id,
+          name: conv.peer_username,
+          avatar: `/placeholder.svg?height=40&width=40&text=${conv.peer_username.charAt(0)}`,
+          lastMessage: conv.last_message || 'No hay mensajes',
+          lastMessageTime: formatDate(conv.last_message_time),
+          unread: conv.unread_count || 0,
+          sessionId: conv.session_id,
+          sessionStatus: 'active'
+        }));
+      } catch (error) {
+        console.error('Error al cargar conversaciones:', error);
+      }
+    };
 
-      // Limpiar intervalo al desmontar
-      return () => clearInterval(intervalId);
-    });
+    // Función para aceptar una sesión pendiente
+    const acceptSession = async (sessionId, initiatorId) => {
+      try {
+        await authService.acceptSession(sessionId);
 
-    // Observar cambios en los mensajes para hacer scroll
-    watch(messages, () => {
-      nextTick(() => {
+        // Recargar sesiones pendientes y conversaciones
+        await loadPendingSessions();
+        await loadConversations();
+
+        // Seleccionar automáticamente la conversación aceptada
+        const newConversation = activeUsers.value.find(user => user.id === initiatorId);
+        if (newConversation) {
+          selectUser(newConversation);
+        }
+      } catch (error) {
+        console.error('Error al aceptar sesión:', error);
+        alert('No se pudo aceptar la sesión. Inténtalo de nuevo.');
+      }
+    };
+
+    // Función para rechazar una sesión pendiente
+    const rejectSession = async (sessionId) => {
+      try {
+        // Implementar rechazo de sesión
+        await authService.rejectSession(sessionId);
+
+        // Por ahora, solo eliminamos de la lista local
+        incomingPendingSessions.value = incomingPendingSessions.value.filter(
+          session => session.session_id !== sessionId
+        );
+      } catch (error) {
+        console.error('Error al rechazar sesión:', error);
+        alert('No se pudo rechazar la sesión. Inténtalo de nuevo.');
+      }
+    };
+
+    // Función para cancelar una sesión pendiente enviada
+    const cancelSession = async (sessionId) => {
+      try {
+        // Implementar cancelación de sesión
+        await authService.cancelSession(sessionId);
+
+        outgoingPendingSessions.value = outgoingPendingSessions.value.filter(
+          session => session.session_id !== sessionId
+        );
+
+      } catch (error) {
+        console.error('Error al cancelar sesión:', error);
+        alert('No se pudo cancelar la sesión. Inténtalo de nuevo.');
+      }
+    };
+
+    // Función para seleccionar un usuario para chatear
+    const selectUser = async (user) => {
+      selectedUser.value = user;
+
+      // Cargar mensajes
+      await loadMessages(user.sessionId);
+
+      // Desplazar al final de los mensajes
+      await nextTick();
+      if (messagesContainer.value) {
+        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+      }
+    };
+
+    // Función para cargar mensajes de una sesión
+    const loadMessages = async (sessionId) => {
+      try {
+        const response = await messageService.getMessages(sessionId);
+
+        // Transformar los mensajes al formato esperado por la UI
+        messages.value = response.messages.map(msg => ({
+          id: msg.id,
+          text: msg.message,
+          sender: msg.sender_id === authService.currentUser.id ? 'me' : 'them',
+          timestamp: formatDate(msg.timestamp)
+        }));
+      } catch (error) {
+        console.error('Error al cargar mensajes:', error);
+        messages.value = [];
+      }
+    };
+
+    // Función para enviar un mensaje
+    const sendMessage = async () => {
+      if (!newMessage.value.trim() || !selectedUser.value) return;
+
+      try {
+        // Enviar mensaje
+        await messageService.sendMessage(selectedUser.value.sessionId, newMessage.value);
+
+        // Añadir mensaje a la lista local
+        messages.value.push({
+          id: Date.now(),
+          text: newMessage.value,
+          sender: 'me',
+          timestamp: formatDate(new Date())
+        });
+
+        // Limpiar campo de mensaje
+        newMessage.value = '';
+
+        // Desplazar al final de los mensajes
+        await nextTick();
         if (messagesContainer.value) {
           messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
         }
-        if (mobileMessagesContainer.value) {
-          mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
-        }
-      });
-    });
+      } catch (error) {
+        console.error('Error al enviar mensaje:', error);
+        alert('No se pudo enviar el mensaje. Inténtalo de nuevo.');
+      }
+    };
 
-    // Cerrar menús al hacer clic fuera
-    onMounted(() => {
-      document.addEventListener('click', (event) => {
-        //const addFriendMenu = document.querySelector('.relative button[title="Añadir amigos"]');
-        const profileMenu = document.querySelector('.relative button[title="Mi perfil"]');
+    // Función para confirmar eliminación de sesión
+    const confirmDeleteSession = () => {
+      if (confirm('¿Estás seguro de que deseas eliminar esta conversación? Todos los mensajes se perderán.')) {
+        deleteSession();
+      }
+    };
 
-        //if (addFriendMenu && !addFriendMenu.contains(event.target) && isAddFriendMenuOpen.value) {
-        //  isAddFriendMenuOpen.value = false;
-        //}
+    // Función para eliminar una sesión
+    const deleteSession = async () => {
+      if (!selectedUser.value) return;
 
-        if (profileMenu && !profileMenu.contains(event.target) && isProfileMenuOpen.value) {
-          isProfileMenuOpen.value = false;
-        }
-      });
-    });
+      try {
+        // Implementar eliminación de sesión
+        // await authService.deleteSession(selectedUser.value.sessionId);
+
+        // Eliminar de la lista local
+        activeUsers.value = activeUsers.value.filter(
+          user => user.id !== selectedUser.value.id
+        );
+
+        // Deseleccionar usuario
+        selectedUser.value = null;
+      } catch (error) {
+        console.error('Error al eliminar sesión:', error);
+        alert('No se pudo eliminar la sesión. Inténtalo de nuevo.');
+      }
+    };
+
+    // Función para ver perfil
+    const viewProfile = () => {
+      alert('Funcionalidad de perfil no implementada');
+      isProfileMenuOpen.value = false;
+    };
+
+    // Función para cerrar sesión
+    const logout = () => {
+      //messageService.logout();
+      authService.logout();
+      messageService.logout();
+      router.push('/');
+    };
+
+    // Función auxiliar para formatear fechas
+    const formatDate = (dateString) => {
+      if (!dateString) return '';
+
+      const date = new Date(dateString);
+      const now = new Date();
+
+      // Si es hoy, mostrar solo la hora
+      if (date.toDateString() === now.toDateString()) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      // Si es este año, mostrar día y mes
+      if (date.getFullYear() === now.getFullYear()) {
+        return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+      }
+
+      // Si es otro año, mostrar día, mes y año
+      return date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+    };
 
     return {
-      selectedUser,
-      messages,
-      newMessage,
-      messagesContainer,
-      mobileMessagesContainer,
       isAddFriendMenuOpen,
       isProfileMenuOpen,
       newFriendName,
       potentialFriends,
+      selectedUser,
+      newMessage,
+      messages,
+      messagesContainer,
+      activeUsers,
       incomingPendingSessions,
       outgoingPendingSessions,
-      activeUsers,
-      isMobile,
-      showDeleteConfirmation,
-      selectUser,
-      sendMessage,
-      acceptSession,
-      rejectSession,
-      cancelSession,
-      confirmDeleteSession,
-      deleteSession,
       toggleAddFriendMenu,
       toggleProfileMenu,
       addFriend,
       selectFriendFromList,
+      acceptSession,
+      rejectSession,
+      cancelSession,
+      selectUser,
+      sendMessage,
+      confirmDeleteSession,
       viewProfile,
       logout
     };
   }
-};
+}
 </script>
 
 <style scoped>

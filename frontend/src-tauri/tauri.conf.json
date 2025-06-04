@@ -1,5 +1,5 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "identifier": "com.godxat.app",
   "productName": "GodXat",
   "version": "1.0.8",
@@ -11,28 +11,64 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://godxat-api.onrender.com wss://godxat-api.onrender.com"
+      "csp": "default-src 'self'; connect-src 'self' https://godxat-api.onrender.com wss://godxat-api.onrender.com",
+      "capabilities": [
+        {
+          "identifier": "fs-read-write-home",
+          "description": "Permite lectura y escritura completa dentro de $HOME",
+          "windows": ["main"],
+          "permissions": [
+            "fs:allow-home-read",
+            "fs:allow-home-write",
+            "fs:allow-read",
+            "fs:allow-write",
+            "fs:allow-mkdir",
+            "fs:allow-create",
+            "fs:allow-write-file",
+            "fs:allow-write-text-file",
+            "fs:create-app-specific-dirs",
+            "fs:allow-app-write-recursive",
+            "fs:allow-open",
+            "fs:write-files",
+            "fs:write-all",
+            "fs:read-files",
+            "fs:read-all",
+            "core:resources:allow-close",
+            "fs:allow-remove"
+          ],
+          "allow": [{"path": "$APPDATA/**"}]
+        },
+        {
+          "identifier": "dialog-message",
+          "description": "Permite mostrar mensajes de diálogo",
+          "windows": ["main"],
+          "permissions": ["dialog:allow-message"],
+          "scopes": ["local://*", "$APPDATA/**", "$HOME/**", "$TMP/**", "$APPDATA/godxatkeys/**","$APPLOCALDATADIR/**"]
+        },
+        {
+          "identifier": "allow-path-resolve",
+          "description": "Permite resolver directorios con path.resolveDirectory",
+          "windows": ["main"],
+          "permissions": ["core:path:allow-resolve-directory", "core:path:default"],
+          "scopes": ["local://*", "$APPDATA/**", "$HOME/**", "$TMP/**", "$APPDATA/godxatkeys/**","$APPLOCALDATADIR/**"]
+        }
+      ]
     },
+    "withGlobalTauri": true,
     "windows": [
       {
         "fullscreen": false,
         "height": 600,
         "resizable": true,
         "title": "GodXat",
-        "width": 800
+        "width": 800,
+        "label": "main"
       }
     ]
   },
   "bundle": {
     "active": true,
     "category": "SocialNetworking",
-    "copyright": "",
-    "linux": {
-      "deb": {
-        "depends": []
-      }
-    },
-    "externalBin": [],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,25 +76,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "longDescription": "Aplicación de mensajería con cifrado de extremo a extremo",
-    "macOS": {
-      "entitlements": null,
-      "exceptionDomain": "",
-      "frameworks": [],
-      "providerShortName": null,
-      "signingIdentity": null
-    },
-    "resources": [],
     "shortDescription": "Mensajería cifrada",
+    "longDescription": "Aplicación de mensajería con cifrado de extremo a extremo",
     "targets": "all",
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": ""
-    },
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": true
+    },
     "updater": {
       "active": true,
       "endpoints": [
@@ -66,9 +92,6 @@
       ],
       "dialog": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU4OTFCMEVBQTM1NjM3NTQKUldSVU4xYWo2ckNSNkNXUHBQWnV0MGlyazg3dHdzSlhJTXZ0aHUxRmovSHpqVVV5NWJnR3V0UWIK"
-    },
-    "fs": {
-      "requireLiteralLeadingDot": false
     }
   }
 }
