@@ -1,14 +1,16 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.database import SessionLocal
+from app.database import SessionLocal,redis_client,NONCE_EXPIRATION_SECONDS, MAX_ATTEMPTS_LOGIN
 from app.models import User, Message, KeySession
 from app.schemas import MessageCreate, EphemeralMessage
 from app.routes.auth import get_current_user
-from datetime import datetime
+from app.routes.websocket import notify_new_message
+from datetime import datetime, timezone
 import json
 
 router = APIRouter()
-
 
 def get_db():
     db = SessionLocal()
@@ -19,16 +21,20 @@ def get_db():
 
 
 @router.post("/send_message_ephemeral/")
-def send_message_ephemeral(
+async def send_message_ephemeral(
         data: EphemeralMessage,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
     session_id = data.session_id
-    encrypted_message_json = data.message  # Este es el mensaje ya cifrado y firmado por el frontend
+    encrypted_message_json = data.message
+    encrypted_message = json.loads(encrypted_message_json)
 
-    """Envía un mensaje usando exclusivamente claves efímeras y firma RSA"""
-    # Verificar que la sesión existe y está activa
+    now = datetime.now(timezone.utc)
+    timestamp_str = encrypted_message['timestamp']
+    timestamp = datetime.fromisoformat(timestamp_str)
+    nonce = encrypted_message['nonce']
+
     session = db.query(KeySession).filter(
         KeySession.session_id == session_id,
         ((KeySession.initiator_id == current_user.id) | (KeySession.receiver_id == current_user.id)),
@@ -38,36 +44,43 @@ def send_message_ephemeral(
     if not session:
         raise HTTPException(status_code=404, detail="Sesión activa no encontrada")
 
-    # Determinar el receptor
+    if abs((now - timestamp).total_seconds()) > NONCE_EXPIRATION_SECONDS:
+        raise HTTPException(status_code=400, detail="Mensaje vencido")
+
+    if redis_client.get(f"nonce:{nonce}"):
+        raise HTTPException(status_code=400, detail="Nonce ya usado (replay detectado)")
+
+    redis_client.setex(f"nonce:{nonce}", NONCE_EXPIRATION_SECONDS, "1")
+
     receiver_id = session.receiver_id if session.initiator_id == current_user.id else session.initiator_id
 
-    # Obtener el último número de mensaje para esta sesión
     last_message = db.query(Message).filter(
         Message.session_id == session_id
     ).order_by(Message.message_number.desc()).first()
 
     message_number = 1 if last_message is None else last_message.message_number + 1
 
-    # Nota: Ya no ciframos ni firmamos mensajes en el backend
-    # El frontend envía el mensaje ya cifrado y firmado
-
-    # Guardar el mensaje (JSON con cifrado y firma) en la base de datos
     new_message = Message(
         sender_id=current_user.id,
         receiver_id=receiver_id,
-        encrypted_message=encrypted_message_json,  # Guardar el JSON completo recibido del frontend
+        encrypted_message=encrypted_message_json,
         session_id=session_id,
         message_number=message_number,
         created_at=datetime.utcnow()
     )
     db.add(new_message)
     db.commit()
+    db.refresh(new_message)
+
+    # Ejecutar tarea asincrónica en segundo plano
+    asyncio.create_task(notify_new_message(new_message, db))
 
     return {
         "message": "Mensaje enviado correctamente",
         "session_id": session_id,
         "message_number": message_number
     }
+
 
 
 @router.get("/get_messages_ephemeral/{session_id}")
@@ -90,9 +103,6 @@ def get_messages_ephemeral(
     messages = db.query(Message).filter(
         Message.session_id == session_id
     ).order_by(Message.created_at).all()
-
-    # Nota: Ya no desciframos ni verificamos firmas en el backend
-    # Solo devolvemos los mensajes cifrados para que el frontend los descifre
 
     # Preparar respuesta con mensajes cifrados
     encrypted_messages = []
@@ -189,15 +199,13 @@ def get_conversations_ephemeral(
             Message.session_id == session.session_id
         ).order_by(Message.created_at.desc()).first()
 
-        # Nota: Ya no desciframos mensajes en el backend
-        # Solo devolvemos información básica sobre la conversación
 
         user_conversations[peer_id] = {
             "peer_id": peer_id,
             "peer_username": peer.username,
             "session_id": session.session_id,
             "last_message_time": last_message.created_at.isoformat() if last_message else None,
-            "has_unread": False  # Esta lógica podría implementarse si se desea
+            "has_unread": False
         }
 
     return {"conversations": list(user_conversations.values())}

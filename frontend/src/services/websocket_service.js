@@ -7,7 +7,7 @@ import { ref, reactive } from 'vue';
 export class WebSocketService {
     constructor() {
         this.apiUrl = process.env.VUE_APP_API_URL || '';
-        this.wsUrl = this.apiUrl.replace(/^http/, 'ws') + '/ws';
+        this.wsUrl = process.env.VUE_APP_WS_URL;
         this.socket = null;
         this.token = null;
         this.currentUser = null;

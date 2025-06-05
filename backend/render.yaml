@@ -14,3 +14,5 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: https://godxat.github.io,tauri://localhost,app://localhost
+      - key: REDIS_URL
+        value: redis://redis:6379

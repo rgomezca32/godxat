@@ -1,7 +1,10 @@
+from urllib import request
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from argon2 import PasswordHasher, exceptions
 from sqlalchemy.orm import Session
-from app.database import SessionLocal
+from app.database import SessionLocal,redis_client,BLOCK_TIME_SECONDS,MAX_ATTEMPTS_LOGIN
 from app.models import User, Message, KeySession
 from app.schemas import UserCreate, UserLogin, MessageCreate
 from app.security import create_access_token, verify_password, SECRET_KEY, ALGORITHM
@@ -9,15 +12,14 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from typing import Optional, List
 from fastapi.security import OAuth2PasswordBearer
+import asyncio
+from app.routes.websocket import notify_session_update
 import os
 import uuid
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login/")
 router = APIRouter()
-
-failed_attempts = {} # Estructura que guarda la IP/Usuario si esta bloqueado
-MAX_ATTEMPTS = 5  # Cantidad máxima de intentos por IP/Usuario
-BLOCK_TIME_MINUTES = 1 # Cantidad de minutos hasta reintentar el login
+ph = PasswordHasher()
 
 def get_db():
     db = SessionLocal()
@@ -26,6 +28,15 @@ def get_db():
     finally:
         db.close()
 
+def check_login_attempts(ip: str, username: str):
+    key = f"login_attempts:{ip}:{username}"
+    attempts = redis_client.get(key)
+    if attempts and int(attempts) >= MAX_ATTEMPTS_LOGIN:
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiados intentos fallidos. Inténtalo más tarde."
+        )
+    return key
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
@@ -50,19 +61,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 @router.post("/register/")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     # Verificamos si el usuario ya existe
-    existing_user = db.query(User).filter(User.username == user.username).first()
-    if existing_user:
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if db_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El nombre de usuario ya está registrado."
         )
-
-    # Nota: Ya no generamos claves RSA/DH en el backend
-    # El frontend envía las claves públicas ya generadas
-
-    # Guardamos el hash de la contraseña recibido del frontend
-    # Ya no hasheamos la contraseña en el backend
-    password_hash = user.password
+    password_hash = ph.hash(user.password)
 
     new_user = User(
         username=user.username,
@@ -74,33 +79,47 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    # Nota: Ya no guardamos claves privadas en el backend
-    # Las claves privadas se almacenan exclusivamente en el frontend/Tauri
-
     return {"message": "Usuario registrado correctamente"}
 
 
 @router.post("/login/")
-def login(user: UserLogin, db: Session = Depends(get_db)):
-    users = db.query(User).all()
+def login(user: UserLogin, request: Request,db: Session = Depends(get_db)):
+    ip = request.client.host
+    username = user.username
+    redis_key = check_login_attempts(ip, username)
 
-    for u in users:
-        print(u.username)
+    db_user = db.query(User).filter(User.username == username).first()
 
-    db_user = db.query(User).filter(User.username == str(user.username)).first()
-    #console.log(user);
+    if not db_user:
+        # Usuario no existe, incrementar contador y bloquear si hace falta
+        redis_client.incr(redis_key)
+        redis_client.expire(redis_key, BLOCK_TIME_SECONDS)
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    try:
+        # Verificar contraseña
+        if not ph.verify(db_user.password_hash, user.password):
+            # Contraseña incorrecta
+            redis_client.incr(redis_key)
+            redis_client.expire(redis_key, BLOCK_TIME_SECONDS)
+            raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    except Exception:
+        # verify puede lanzar excepción si no coincide así evitamos errores
+        redis_client.incr(redis_key)
+        redis_client.expire(redis_key, BLOCK_TIME_SECONDS)
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    # Resetear contador si el login es exitoso
+    redis_client.delete(redis_key)
+
     if not db_user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-    # Nota: La verificación de contraseña ahora se realiza en el frontend
-    # Aquí solo verificamos que el usuario exista y generamos el token
 
     access_token = create_access_token(
         data={"sub": db_user.username},
         expires_delta=timedelta(minutes=30)
     )
-
-    print(access_token)
 
     return {"token": access_token, "token_type": "bearer"}
 
@@ -186,7 +205,7 @@ def search_user(name: str, db: Session = Depends(get_db)):
 # Modificados para solo almacenar datos ya preparados por el frontend
 
 @router.post("/initiate_session/{receiver_id}")
-def initiate_session_endpoint(
+async def initiate_session_endpoint(
         receiver_id: int,
         session_data: dict,  # Contiene session_id, ephemeral_public, signature
         db: Session = Depends(get_db),
@@ -234,6 +253,10 @@ def initiate_session_endpoint(
     )
     db.add(new_session)
     db.commit()
+    db.refresh(new_session)
+
+    # Notificar al receptor a través de WebSocket
+    asyncio.create_task(notify_session_update(new_session, "session_request", db))
 
     return {
         "session_id": session_data["session_id"],
@@ -296,7 +319,7 @@ def get_out_coming_pending_sessions(
 
 
 @router.post("/accept_session/{session_id}")
-def accept_session_endpoint(
+async def accept_session_endpoint(
         session_id: str,
         session_data: dict,  # Contiene ephemeral_public, signature
         db: Session = Depends(get_db),
@@ -327,6 +350,9 @@ def accept_session_endpoint(
     session.updated_at = datetime.utcnow()
     db.commit()
 
+    # Notificar al iniciador a través de WebSocket
+    asyncio.create_task(notify_session_update(session, "session_accepted", db))
+
     return {
         "session_id": session_id,
         "status": "active",
@@ -335,7 +361,7 @@ def accept_session_endpoint(
 
 
 @router.post("/reject_session/{session_id}")
-def reject_session_endpoint(
+async def reject_session_endpoint(
         session_id: str,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
@@ -351,9 +377,20 @@ def reject_session_endpoint(
     if not session:
         raise HTTPException(status_code=404, detail="Sesión pendiente no encontrada")
 
+    # Guardar una copia de la sesión para notificación
+    session_copy = KeySession(
+        session_id=session.session_id,
+        initiator_id=session.initiator_id,
+        receiver_id=session.receiver_id,
+        status="rejected"
+    )
+
     # Eliminar la sesión de la base de datos
     db.delete(session)
     db.commit()
+
+    # Notificar al iniciador a través de WebSocket
+    asyncio.create_task(notify_session_update(session_copy, "session_rejected", db))
 
     return {
         "message": "Sesión rechazada correctamente"
@@ -386,7 +423,7 @@ def cancel_session_endpoint(
 
 
 @router.post("/complete_session/{session_id}")
-def complete_session_endpoint(
+async def complete_session_endpoint(
         session_id: str,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
@@ -405,6 +442,9 @@ def complete_session_endpoint(
     session.status = "active"
     session.updated_at = datetime.utcnow()
     db.commit()
+
+    # Notificar al receptor a través de WebSocket
+    asyncio.create_task(notify_session_update(session, "session_completed", db))
 
     return {
         "session_id": session_id,
@@ -515,7 +555,7 @@ def get_active_sessions(
 
 
 @router.post("/close_session/{session_id}")
-def close_session(
+async def close_session(
         session_id: str,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
@@ -535,6 +575,9 @@ def close_session(
     session.status = "closed"
     session.updated_at = datetime.utcnow()
     db.commit()
+
+    # Notificar a ambos participantes a través de WebSocket
+    asyncio.create_task(notify_session_update(session, "session_closed", db))
 
     return {
         "message": "Sesión cerrada correctamente"

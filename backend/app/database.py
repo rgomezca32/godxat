@@ -1,5 +1,7 @@
 # backend/app/database.py
 import os
+
+import redis
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -8,8 +10,12 @@ from dotenv import load_dotenv
 # Cargar variables de entorno
 load_dotenv()
 
-# Obtener URL de la base de datos desde variables de entorno
+# Obtener URL de la base de datos desde variables de entorno y variables de entorno
 DATABASE_URL = os.getenv("DATABASE_URL")
+REDIS_URL = os.getenv("REDIS_URL")
+NONCE_EXPIRATION_SECONDS = int(os.getenv("NONCE_EXPIRATION_SECONDS"))
+BLOCK_TIME_SECONDS = int(os.getenv("BLOCK_TIME_SECONDS"))
+MAX_ATTEMPTS_LOGIN = int(os.getenv("MAX_ATTEMPTS_LOGIN"))
 
 # Si estamos en Render.com, la URL de PostgreSQL comienza con "postgres://"
 # pero SQLAlchemy requiere "postgresql://"
@@ -37,3 +43,6 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Inicializar cliente Redis
+redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
