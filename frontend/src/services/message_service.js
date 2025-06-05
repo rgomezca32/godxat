@@ -1,21 +1,124 @@
+// message_service.js modificado
 import axios from 'axios';
 import { KeyStorage } from './key_storage';
 import { CryptoUtils } from './crypto_utils';
+import WebSocketService from './websocket_service';
 
 /**
  * Servicio de mensajería que maneja el envío y recepción de mensajes cifrados
- * utilizando criptografía en el frontend con Tauri
+ * utilizando criptografía en el frontend con Tauri y WebSockets para tiempo real
  */
 export class MessageService {
     constructor() {
-        this.apiUrl = 'https://godxat-api.onrender.com';
+        this.apiUrl = process.env.VUE_APP_API_URL;
         this.keyStorage = new KeyStorage();
         this.cryptoUtils = new CryptoUtils();
         this.token = null;
         this.currentUser = null;
         this.processedNonces = new Set(); // Para protección contra replay attacks
-        this.pollingIntervals = {}; // Para sincronización en tiempo real
-        this.DEFAULT_POLLING_INTERVAL = 3000; // 3 segundos
+        this.messageCallbacks = new Map(); // Para callbacks de mensajes
+        this.messageListeners = new Map(); // Para listeners de mensajes por sesión
+        this.typingDebounceTimers = new Map(); // Para debounce de notificaciones de escritura
+    }
+
+    /**
+     * Inicializa el servicio de mensajes
+     */
+    initMessageService() {
+        this.token = localStorage.getItem('token') || null;
+        this.currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+
+        // Registrar manejadores de eventos WebSocket
+        this.registerWebSocketHandlers();
+    }
+
+    /**
+     * Registra manejadores para eventos WebSocket
+     */
+    registerWebSocketHandlers() {
+        // Manejar nuevos mensajes
+        WebSocketService.on('new_message', this.handleNewMessage.bind(this));
+
+        // Manejar confirmaciones de entrega
+        WebSocketService.on('message_delivered', this.handleMessageDelivered.bind(this));
+
+        // Manejar confirmaciones de lectura
+        WebSocketService.on('message_read', this.handleMessageRead.bind(this));
+    }
+
+    /**
+     * Maneja la notificación de nuevo mensaje
+     * @param {object} data - Datos del mensaje
+     */
+    async handleNewMessage(data) {
+        try {
+            // Verificar si el mensaje es para el usuario actual
+            if (data.receiver_id !== this.currentUser.id) {
+                return;
+            }
+
+            // Obtener el mensaje completo
+            const messages = await this.getMessages(data.session_id);
+
+            // Notificar entrega
+            WebSocketService.notifyMessageDelivered(data.message_id, data.session_id);
+
+            // Llamar a los callbacks registrados para esta sesión
+            if (this.messageListeners.has(data.session_id)) {
+                const listeners = this.messageListeners.get(data.session_id);
+                listeners.forEach(callback => {
+                    try {
+                        callback(messages);
+                    } catch (error) {
+                        console.error('Error en callback de mensaje:', error);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error al manejar nuevo mensaje:', error);
+        }
+    }
+
+    /**
+     * Maneja la confirmación de entrega de mensaje
+     * @param {object} data - Datos de la confirmación
+     */
+    handleMessageDelivered(data) {
+        // Llamar a los callbacks registrados para este mensaje
+        if (this.messageCallbacks.has(`delivered_${data.message_id}`)) {
+            const callbacks = this.messageCallbacks.get(`delivered_${data.message_id}`);
+            callbacks.forEach(callback => {
+                try {
+                    callback(data);
+                } catch (error) {
+                    console.error('Error en callback de entrega:', error);
+                }
+            });
+
+            // Limpiar callbacks
+            this.messageCallbacks.delete(`delivered_${data.message_id}`);
+        }
+    }
+
+    /**
+     * Maneja la confirmación de lectura de mensaje
+     * @param {object} data - Datos de la confirmación
+     */
+    handleMessageRead(data) {
+        // Llamar a los callbacks registrados para este mensaje
+        if (this.messageCallbacks.has(`read_${data.message_id}`)) {
+            const callbacks = this.messageCallbacks.get(`read_${data.message_id}`);
+            callbacks.forEach(callback => {
+                try {
+                    callback(data);
+                } catch (error) {
+                    console.error('Error en callback de lectura:', error);
+                }
+            });
+
+            // Limpiar callbacks
+            this.messageCallbacks.delete(`read_${data.message_id}`);
+        }
     }
 
     /**
@@ -115,12 +218,11 @@ export class MessageService {
                         msg.message_number
                     );
 
-                    // Verificar y descifrar el mensaje con protección contra replay attacks
+                    // Verificar y descifrar el mensaje
                     const result = await this.cryptoUtils.verifyAndDecryptMessage(
                         msg.encrypted_message,
                         messageKey,
-                        sender.data.rsa_public_key,
-                        this.processedNonces
+                        sender.data.rsa_public_key
                     );
 
                     // Manejar diferentes resultados según el estado de verificación
@@ -145,6 +247,11 @@ export class MessageService {
                             message: result.content,
                             metadata: result.metadata
                         });
+                    }
+
+                    // Notificar lectura del mensaje si no es del usuario actual
+                    if (msg.sender_id !== this.currentUser.id) {
+                        WebSocketService.notifyMessageRead(msg.id, sessionId);
                     }
                 } catch (error) {
                     // Si hay error al descifrar, mantener el mensaje con error
@@ -187,65 +294,84 @@ export class MessageService {
     }
 
     /**
-     * Inicia la sincronización en tiempo real de mensajes para una sesión
+     * Registra un listener para mensajes de una sesión específica
      * @param {string} sessionId - ID de la sesión
      * @param {Function} callback - Función a llamar cuando hay nuevos mensajes
-     * @returns {boolean} - true si se inició correctamente
+     * @returns {Function} - Función para eliminar el listener
      */
-    startMessagePolling(sessionId, callback) {
-        // Detener polling existente si lo hay
-        this.stopMessagePolling(sessionId);
+    listenForMessages(sessionId, callback) {
+        if (!this.messageListeners.has(sessionId)) {
+            this.messageListeners.set(sessionId, new Set());
+        }
 
-        // Iniciar nuevo polling
-        this.pollingIntervals[sessionId] = setInterval(async () => {
-            try {
-                const messages = await this.getMessages(sessionId);
-                callback(messages);
-            } catch (error) {
-                console.error('Error en polling de mensajes:', error);
+        this.messageListeners.get(sessionId).add(callback);
+
+        // Devolver función para eliminar el listener
+        return () => {
+            if (this.messageListeners.has(sessionId)) {
+                this.messageListeners.get(sessionId).delete(callback);
+                if (this.messageListeners.get(sessionId).size === 0) {
+                    this.messageListeners.delete(sessionId);
+                }
             }
-        }, this.DEFAULT_POLLING_INTERVAL);
-
-        return true;
+        };
     }
 
     /**
-     * Detiene la sincronización en tiempo real de mensajes para una sesión
+     * Notifica que el usuario está escribiendo en una sesión
      * @param {string} sessionId - ID de la sesión
      */
-    stopMessagePolling(sessionId) {
-        if (this.pollingIntervals[sessionId]) {
-            clearInterval(this.pollingIntervals[sessionId]);
-            delete this.pollingIntervals[sessionId];
+    notifyTyping(sessionId) {
+        // Debounce para evitar enviar demasiadas notificaciones
+        if (this.typingDebounceTimers.has(sessionId)) {
+            clearTimeout(this.typingDebounceTimers.get(sessionId));
         }
+
+        this.typingDebounceTimers.set(sessionId, setTimeout(() => {
+            WebSocketService.notifyTyping(sessionId);
+            this.typingDebounceTimers.delete(sessionId);
+        }, 500)); // 500ms de debounce
     }
 
     /**
-     * Detiene todas las sincronizaciones en tiempo real
+     * Verifica si un usuario está escribiendo en una sesión
+     * @param {string} sessionId - ID de la sesión
+     * @returns {boolean} - true si el usuario está escribiendo
      */
-    stopAllPolling() {
-        Object.keys(this.pollingIntervals).forEach(sessionId => {
-            this.stopMessagePolling(sessionId);
-        });
+    isUserTyping(sessionId) {
+        return WebSocketService.isUserTyping(sessionId);
+    }
+
+    /**
+     * Verifica si un usuario está en línea
+     * @param {number} userId - ID del usuario
+     * @returns {boolean} - true si el usuario está en línea
+     */
+    isUserOnline(userId) {
+        return WebSocketService.isUserOnline(userId);
     }
 
     /**
      * Limpia los recursos al cerrar sesión
      */
     logout() {
-        // Detener todos los pollings
-        this.stopAllPolling();
-
         // Limpiar datos de sesión
         this.token = null;
         this.currentUser = null;
         this.processedNonces.clear();
-    }
+        this.messageCallbacks.clear();
+        this.messageListeners.clear();
 
-    initMessageService(){
-        this.token = localStorage.getItem('token') || null;
-        this.currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+        // Limpiar timers de debounce
+        this.typingDebounceTimers.forEach(timer => clearTimeout(timer));
+        this.typingDebounceTimers.clear();
+
+        // Eliminar manejadores de eventos WebSocket
+        WebSocketService.off('new_message');
+        WebSocketService.off('message_delivered');
+        WebSocketService.off('message_read');
     }
 }
 
 export default new MessageService();
+

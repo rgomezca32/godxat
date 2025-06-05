@@ -235,9 +235,7 @@ export class CryptoUtils {
             // Crear objeto de mensaje con timestamp y nonce
             const messageData = {
                 content: message,
-                timestamp: new Date().toISOString(),
-                nonce: nonce,
-                message_version: 1 // Para futuras actualizaciones del formato
+                timestamp: new Date().toISOString()
             };
 
             // Convertir a JSON y cifrar
@@ -251,7 +249,8 @@ export class CryptoUtils {
             const messageObject = {
                 encrypted_content: encryptedMessage,
                 signature: signature,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                nonce: nonce
             };
 
             return JSON.stringify(messageObject);
@@ -271,10 +270,9 @@ export class CryptoUtils {
      * @param {string} encryptedMessageJson - JSON con mensaje cifrado y firma
      * @param {string} messageKey - Clave de mensaje en formato Base64
      * @param {string} rsaPublicKey - Clave RSA pública del remitente
-     * @param {Set} processedNonces - Conjunto de nonces ya procesados
      * @returns {Promise<Object>} - Objeto con mensaje descifrado y metadatos
      */
-    async verifyAndDecryptMessage(encryptedMessageJson, messageKey, rsaPublicKey, processedNonces = null) {
+    async verifyAndDecryptMessage(encryptedMessageJson, messageKey, rsaPublicKey) {
         try {
             // Parsear el JSON
             const messageObject = JSON.parse(encryptedMessageJson);
@@ -298,54 +296,11 @@ export class CryptoUtils {
             const decryptedJson = await this.decryptMessage(messageObject.encrypted_content, messageKey);
             const messageData = JSON.parse(decryptedJson);
 
-            // Verificar nonce si se proporciona un conjunto de nonces procesados
-            if (processedNonces && messageData.nonce) {
-                if (processedNonces.has(messageData.nonce)) {
-                    return {
-                        content: null,
-                        error: 'replay_attack',
-                        errorMessage: 'Mensaje repetido detectado (nonce duplicado)',
-                        metadata: {
-                            timestamp: messageData.timestamp,
-                            nonce: messageData.nonce,
-                            version: messageData.message_version
-                        }
-                    };
-                }
-
-                // Registrar el nonce como procesado
-                processedNonces.add(messageData.nonce);
-            }
-
-            // Verificar timestamp (opcional, para mensajes muy antiguos)
-            if (messageData.timestamp) {
-                const msgTime = new Date(messageData.timestamp);
-                const now = new Date();
-                const timeDiff = now - msgTime;
-
-                // Si el mensaje tiene más de 24 horas, marcarlo como potencialmente sospechoso
-                if (timeDiff > 86400000) {
-                    return {
-                        content: messageData.content,
-                        warning: 'message_old',
-                        warningMessage: 'Mensaje antiguo (más de 24 horas)',
-                        metadata: {
-                            timestamp: messageData.timestamp,
-                            nonce: messageData.nonce,
-                            version: messageData.message_version,
-                            age: Math.floor(timeDiff / 3600000) // Edad en horas
-                        }
-                    };
-                }
-            }
-
             // Mensaje válido
             return {
                 content: messageData.content,
                 metadata: {
-                    timestamp: messageData.timestamp,
-                    nonce: messageData.nonce,
-                    version: messageData.message_version
+                    timestamp: messageData.timestamp
                 }
             };
         } catch (error) {

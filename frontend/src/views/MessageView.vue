@@ -204,12 +204,8 @@
             <div v-if="user.unread > 0" class="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
               {{ user.unread }}
             </div>
-            <!-- Indicador de sesión segura -->
-            <div class="text-green-500" title="Sesión segura activa">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-              </svg>
-            </div>
+            <!-- Reemplazar el indicador de sesión segura con el componente UserStatus -->
+            <UserStatus :user-id="user.id" :session-id="user.sessionId" />
           </div>
         </div>
       </div>
@@ -226,19 +222,12 @@
             </div>
             <div class="ml-3">
               <h2 class="text-lg font-semibold">{{ selectedUser.name }}</h2>
-              <!-- Indicador de estado de sesión -->
-              <div v-if="selectedUser.sessionStatus === 'active'" class="flex items-center text-xs text-green-600">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                </svg>
-                <span>Sesión segura activa</span>
-              </div>
-              <div v-else-if="selectedUser.sessionStatus === 'pending'" class="flex items-center text-xs text-yellow-600">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-                </svg>
-                <span>Sesión pendiente</span>
-              </div>
+              <!-- Reemplazar el indicador de estado de sesión con el componente UserStatus -->
+              <UserStatus
+                v-if="selectedUser.id"
+                :user-id="selectedUser.id"
+                :session-id="selectedUser.sessionId"
+              />
             </div>
           </div>
           <div class="flex items-center">
@@ -301,6 +290,7 @@
               placeholder="Escribe un mensaje..."
               class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               :disabled="selectedUser.sessionStatus === 'pending'"
+              @input="notifyTyping"
             />
             <button
               type="submit"
@@ -356,19 +346,12 @@
           </div>
           <div class="ml-3">
             <h2 class="text-lg font-semibold">{{ selectedUser.name }}</h2>
-            <!-- Indicador de estado de sesión -->
-            <div v-if="selectedUser.sessionStatus === 'active'" class="flex items-center text-xs text-green-600">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-              </svg>
-              <span>Sesión segura activa</span>
-            </div>
-            <div v-else-if="selectedUser.sessionStatus === 'pending'" class="flex items-center text-xs text-yellow-600">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-              </svg>
-              <span>Sesión pendiente</span>
-            </div>
+            <!-- Reemplazar el indicador de estado de sesión con el componente UserStatus -->
+            <UserStatus
+              v-if="selectedUser.id"
+              :user-id="selectedUser.id"
+              :session-id="selectedUser.sessionId"
+            />
           </div>
         </div>
         <div>
@@ -421,6 +404,7 @@
             placeholder="Escribe un mensaje..."
             class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             :disabled="selectedUser.sessionStatus === 'pending'"
+            @input="notifyTyping"
           />
           <button
             type="submit"
@@ -468,13 +452,18 @@
 </template>
 
 <script>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import authService from '@/services/auth_service'
+import authService from '@/services/auth_service';
 import messageService from '@/services/message_service';
+import WebSocketService from '@/services/websocket_service';
+import UserStatus from '@/components/UserStatus.vue';
 
 export default {
   name: 'MessageView',
+  components: {
+    UserStatus
+  },
   setup() {
     const router = useRouter();
 
@@ -487,9 +476,16 @@ export default {
     const newMessage = ref('');
     const messages = ref([]);
     const messagesContainer = ref(null);
+    const mobileMessagesContainer = ref(null);
     const activeUsers = ref([]);
     const incomingPendingSessions = ref([]);
     const outgoingPendingSessions = ref([]);
+    const showDeleteConfirmation = ref(false);
+    const isMobile = computed(() => window.innerWidth < 768);
+
+    // Para WebSockets y estado activo
+    const messageListeners = [];
+    const sessionEventListeners = [];
 
     // Cargar datos al montar el componente
     onMounted(async () => {
@@ -500,7 +496,14 @@ export default {
           router.push('/');
           return;
         }
+
+        // Inicializar servicios
+        WebSocketService.init();
         messageService.initMessageService();
+        authService.init();
+
+        // Registrar listeners para eventos de sesión
+        registerSessionEventListeners();
 
         await authService.checkAndCompleteSessions();
 
@@ -518,6 +521,11 @@ export default {
           router.push('/');
         }
       }
+    });
+
+    // Limpiar listeners al desmontar el componente
+    onBeforeUnmount(() => {
+      cleanupListeners();
     });
 
     // Funciones para menús desplegables
@@ -581,15 +589,11 @@ export default {
     const loadPendingSessions = async () => {
       try {
         const pendingSessions = await authService.getPendingSessions();
-        const outPendingSessions = await  authService.getOutComingPendingSessions();
-
-        console.log(pendingSessions)
-        console.log(outPendingSessions)
+        const outPendingSessions = await authService.getOutComingPendingSessions();
 
         // Separar sesiones pendientes entrantes y salientes
-        incomingPendingSessions.value = pendingSessions.pending_sessions
-
-        outgoingPendingSessions.value = outPendingSessions.out_pending_sessions
+        incomingPendingSessions.value = pendingSessions.pending_sessions || [];
+        outgoingPendingSessions.value = outPendingSessions.out_pending_sessions || [];
       } catch (error) {
         console.error('Error al cargar sesiones pendientes:', error);
       }
@@ -675,10 +679,16 @@ export default {
       // Cargar mensajes
       await loadMessages(user.sessionId);
 
+      // Registrar listener para mensajes de esta sesión
+      registerMessageListener(user.sessionId);
+
       // Desplazar al final de los mensajes
       await nextTick();
       if (messagesContainer.value) {
         messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+      }
+      if (mobileMessagesContainer.value) {
+        mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
       }
     };
 
@@ -692,7 +702,7 @@ export default {
           id: msg.id,
           text: msg.message,
           sender: msg.sender_id === authService.currentUser.id ? 'me' : 'them',
-          timestamp: formatDate(msg.timestamp)
+          timestamp: formatDate(msg.metadata?.timestamp || msg.created_at)
         }));
       } catch (error) {
         console.error('Error al cargar mensajes:', error);
@@ -724,6 +734,9 @@ export default {
         if (messagesContainer.value) {
           messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
         }
+        if (mobileMessagesContainer.value) {
+          mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
+        }
       } catch (error) {
         console.error('Error al enviar mensaje:', error);
         alert('No se pudo enviar el mensaje. Inténtalo de nuevo.');
@@ -732,9 +745,7 @@ export default {
 
     // Función para confirmar eliminación de sesión
     const confirmDeleteSession = () => {
-      if (confirm('¿Estás seguro de que deseas eliminar esta conversación? Todos los mensajes se perderán.')) {
-        deleteSession();
-      }
+      showDeleteConfirmation.value = true;
     };
 
     // Función para eliminar una sesión
@@ -743,7 +754,7 @@ export default {
 
       try {
         // Implementar eliminación de sesión
-        // await authService.deleteSession(selectedUser.value.sessionId);
+        await authService.closeSession(selectedUser.value.sessionId);
 
         // Eliminar de la lista local
         activeUsers.value = activeUsers.value.filter(
@@ -752,6 +763,9 @@ export default {
 
         // Deseleccionar usuario
         selectedUser.value = null;
+
+        // Cerrar modal de confirmación
+        showDeleteConfirmation.value = false;
       } catch (error) {
         console.error('Error al eliminar sesión:', error);
         alert('No se pudo eliminar la sesión. Inténtalo de nuevo.');
@@ -766,7 +780,6 @@ export default {
 
     // Función para cerrar sesión
     const logout = () => {
-      //messageService.logout();
       authService.logout();
       messageService.logout();
       router.push('/');
@@ -793,6 +806,128 @@ export default {
       return date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
     };
 
+    // WebSocket y estado activo
+    const registerSessionEventListeners = () => {
+      // Listener para solicitudes de sesión
+      const sessionRequestListener = authService.onSessionEvent('session_request', () => {
+        loadPendingSessions();
+      });
+      sessionEventListeners.push(sessionRequestListener);
+
+      // Listener para sesiones aceptadas
+      const sessionAcceptedListener = authService.onSessionEvent('session_accepted', () => {
+        loadOutgoingPendingSessions();
+        loadActiveSessions();
+      });
+      sessionEventListeners.push(sessionAcceptedListener);
+
+      // Listener para sesiones rechazadas
+      const sessionRejectedListener = authService.onSessionEvent('session_rejected', () => {
+        loadOutgoingPendingSessions();
+      });
+      sessionEventListeners.push(sessionRejectedListener);
+
+      // Listener para sesiones completadas
+      const sessionCompletedListener = authService.onSessionEvent('session_completed', () => {
+        loadActiveSessions();
+      });
+      sessionEventListeners.push(sessionCompletedListener);
+
+      // Listener para sesiones cerradas
+      const sessionClosedListener = authService.onSessionEvent('session_closed', (data) => {
+        loadActiveSessions();
+        if (selectedUser.value && selectedUser.value.sessionId === data.session_id) {
+          selectedUser.value = null;
+        }
+      });
+      sessionEventListeners.push(sessionClosedListener);
+    };
+
+    const registerMessageListener = (sessionId) => {
+      // Limpiar listener existente para esta sesión
+      messageListeners.forEach((listener, index) => {
+        if (listener.sessionId === sessionId) {
+          listener.removeListener();
+          messageListeners.splice(index, 1);
+        }
+      });
+
+      // Registrar nuevo listener
+      const removeListener = messageService.listenForMessages(sessionId, async () => {
+        await loadMessages(sessionId);
+
+        // Desplazar al final de los mensajes
+        await nextTick();
+        if (messagesContainer.value) {
+          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+        }
+        if (mobileMessagesContainer.value) {
+          mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
+        }
+      });
+
+      // Guardar referencia para limpieza
+      messageListeners.push({
+        sessionId,
+        removeListener
+      });
+    };
+
+    const notifyTyping = () => {
+      if (selectedUser.value && selectedUser.value.sessionId) {
+        messageService.notifyTyping(selectedUser.value.sessionId);
+      }
+    };
+
+    const cleanupListeners = () => {
+      // Limpiar listeners de mensajes
+      messageListeners.forEach(listener => listener.removeListener());
+
+      // Limpiar listeners de eventos de sesión
+      sessionEventListeners.forEach(removeListener => removeListener());
+    };
+
+    // Función auxiliar para cargar sesiones pendientes enviadas
+    const loadOutgoingPendingSessions = async () => {
+      try {
+        const outPendingSessions = await authService.getOutComingPendingSessions();
+        outgoingPendingSessions.value = outPendingSessions.out_pending_sessions || [];
+      } catch (error) {
+        console.error('Error al cargar sesiones pendientes enviadas:', error);
+      }
+    };
+
+    // Función auxiliar para cargar sesiones activas
+    const loadActiveSessions = async () => {
+      try {
+        const activeSessions = await authService.getActiveSessions();
+        const conversations = await messageService.getConversations();
+
+        // Combinar datos de sesiones activas y conversaciones
+        activeUsers.value = activeSessions.active_sessions.map(session => {
+          const isInitiator = session.initiator_id === authService.currentUser.id;
+          const userId = isInitiator ? session.receiver_id : session.initiator_id;
+          const username = isInitiator ? session.receiver_username : session.initiator_username;
+
+          // Buscar la última conversación
+          const conversation = conversations.conversations.find(conv => conv.session_id === session.session_id);
+
+          return {
+            id: userId,
+            name: username,
+            avatar: `/placeholder.svg?height=40&width=40&text=${username.charAt(0).toUpperCase()}`,
+            lastMessage: conversation ? conversation.last_message : 'No hay mensajes',
+            lastMessageTime: conversation ? formatDate(conversation.last_message_time) : '',
+            unread: conversation ? conversation.unread_count : 0,
+            sessionId: session.session_id,
+            sessionStatus: session.status
+          };
+        });
+      } catch (error) {
+        console.error('Error al cargar sesiones activas:', error);
+      }
+    };
+
     return {
       isAddFriendMenuOpen,
       isProfileMenuOpen,
@@ -802,9 +937,12 @@ export default {
       newMessage,
       messages,
       messagesContainer,
+      mobileMessagesContainer,
       activeUsers,
       incomingPendingSessions,
       outgoingPendingSessions,
+      showDeleteConfirmation,
+      isMobile,
       toggleAddFriendMenu,
       toggleProfileMenu,
       addFriend,
@@ -815,8 +953,10 @@ export default {
       selectUser,
       sendMessage,
       confirmDeleteSession,
+      deleteSession,
       viewProfile,
-      logout
+      logout,
+      notifyTyping
     };
   }
 }

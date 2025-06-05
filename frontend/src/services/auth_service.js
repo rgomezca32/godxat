@@ -1,18 +1,161 @@
+// auth_service.js modificado
 import axios from 'axios';
 import { KeyStorage } from './key_storage';
 import { CryptoUtils } from './crypto_utils';
+import WebSocketService from './websocket_service';
 
 /**
  * Servicio de autenticación que maneja el registro, login y gestión de usuarios
- * utilizando criptografía en el frontend con Tauri
+ * utilizando criptografía en el frontend con Tauri y WebSockets para tiempo real
  */
 export class AuthService {
     constructor() {
-        this.apiUrl = 'https://godxat-api.onrender.com';
+        this.apiUrl = process.env.VUE_APP_API_URL;
         this.keyStorage = new KeyStorage();
         this.cryptoUtils = new CryptoUtils();
         this.token = localStorage.getItem('token') || null;
         this.currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+        this.sessionListeners = new Map(); // Para listeners de eventos de sesión
+    }
+
+    /**
+     * Inicializa el servicio de autenticación
+     */
+    init() {
+        // Registrar manejadores de eventos WebSocket
+        this.registerWebSocketHandlers();
+    }
+
+    /**
+     * Registra manejadores para eventos WebSocket
+     */
+    registerWebSocketHandlers() {
+        // Manejar solicitudes de sesión
+        WebSocketService.on('session_request', this.handleSessionRequest.bind(this));
+        
+        // Manejar aceptaciones de sesión
+        WebSocketService.on('session_accepted', this.handleSessionAccepted.bind(this));
+        
+        // Manejar rechazos de sesión
+        WebSocketService.on('session_rejected', this.handleSessionRejected.bind(this));
+        
+        // Manejar completado de sesión
+        WebSocketService.on('session_completed', this.handleSessionCompleted.bind(this));
+        
+        // Manejar cierre de sesión
+        WebSocketService.on('session_closed', this.handleSessionClosed.bind(this));
+        
+        // Manejar sesiones pendientes iniciales
+        WebSocketService.on('pending_sessions', this.handlePendingSessions.bind(this));
+        
+        // Manejar sesiones incompletas iniciales
+        WebSocketService.on('incomplete_sessions', this.handleIncompleteSessions.bind(this));
+    }
+
+    /**
+     * Maneja la notificación de solicitud de sesión
+     * @param {object} data - Datos de la solicitud
+     */
+    handleSessionRequest(data) {
+        this.notifySessionListeners('session_request', data);
+    }
+
+    /**
+     * Maneja la notificación de aceptación de sesión
+     * @param {object} data - Datos de la aceptación
+     */
+    async handleSessionAccepted(data) {
+        try {
+            // Completar la sesión automáticamente
+            await this.completeSession(data.session_id);
+            
+            // Notificar a los listeners
+            this.notifySessionListeners('session_accepted', data);
+        } catch (error) {
+            console.error('Error al completar sesión aceptada:', error);
+        }
+    }
+
+    /**
+     * Maneja la notificación de rechazo de sesión
+     * @param {object} data - Datos del rechazo
+     */
+    handleSessionRejected(data) {
+        this.notifySessionListeners('session_rejected', data);
+    }
+
+    /**
+     * Maneja la notificación de completado de sesión
+     * @param {object} data - Datos del completado
+     */
+    handleSessionCompleted(data) {
+        this.notifySessionListeners('session_completed', data);
+    }
+
+    /**
+     * Maneja la notificación de cierre de sesión
+     * @param {object} data - Datos del cierre
+     */
+    handleSessionClosed(data) {
+        this.notifySessionListeners('session_closed', data);
+    }
+
+    /**
+     * Maneja la notificación inicial de sesiones pendientes
+     * @param {object} data - Datos de sesiones pendientes
+     */
+    handlePendingSessions(data) {
+        this.notifySessionListeners('pending_sessions', data);
+    }
+
+    /**
+     * Maneja la notificación inicial de sesiones incompletas
+     * @param {object} data - Datos de sesiones incompletas
+     */
+    handleIncompleteSessions(data) {
+        this.notifySessionListeners('incomplete_sessions', data);
+    }
+
+    /**
+     * Notifica a los listeners de eventos de sesión
+     * @param {string} eventType - Tipo de evento
+     * @param {object} data - Datos del evento
+     */
+    notifySessionListeners(eventType, data) {
+        if (this.sessionListeners.has(eventType)) {
+            const listeners = this.sessionListeners.get(eventType);
+            listeners.forEach(callback => {
+                try {
+                    callback(data);
+                } catch (error) {
+                    console.error(`Error en listener de ${eventType}:`, error);
+                }
+            });
+        }
+    }
+
+    /**
+     * Registra un listener para eventos de sesión
+     * @param {string} eventType - Tipo de evento
+     * @param {Function} callback - Función a llamar cuando ocurre el evento
+     * @returns {Function} - Función para eliminar el listener
+     */
+    onSessionEvent(eventType, callback) {
+        if (!this.sessionListeners.has(eventType)) {
+            this.sessionListeners.set(eventType, new Set());
+        }
+        
+        this.sessionListeners.get(eventType).add(callback);
+        
+        // Devolver función para eliminar el listener
+        return () => {
+            if (this.sessionListeners.has(eventType)) {
+                this.sessionListeners.get(eventType).delete(callback);
+                if (this.sessionListeners.get(eventType).size === 0) {
+                    this.sessionListeners.delete(eventType);
+                }
+            }
+        };
     }
 
     /**
@@ -69,7 +212,9 @@ export class AuthService {
             // Obtener información del usuario
             const userInfo = await this.getCurrentUser();
 
-            console.log(userInfo)
+            // Inicializar WebSocket
+            WebSocketService.init();
+
             return {
                 token: this.token,
                 user: userInfo
@@ -89,7 +234,7 @@ export class AuthService {
             if (!this.token) {
                 throw new Error('No hay token de autenticación');
             }
-            console.log(this.token)
+            
             const response = await axios.get(`${this.apiUrl}/get_user/me`, {
                 headers: {
                     'Authorization': `Bearer ${this.token}`
@@ -110,15 +255,26 @@ export class AuthService {
      * Cierra la sesión del usuario
      */
     logout() {
-        //console.log(this.token)
-        //console.log(localStorage.getItem('token'))
+        // Desconectar WebSocket
+        WebSocketService.logout();
+        
+        // Limpiar datos de sesión
         this.token = null;
         this.currentUser = null;
         localStorage.removeItem('token');
         localStorage.removeItem('currentUser');
-
-        //console.log(localStorage.getItem('token'));
-        //console.log(localStorage.getItem('currentUser'))
+        
+        // Limpiar listeners
+        this.sessionListeners.clear();
+        
+        // Eliminar manejadores de eventos WebSocket
+        WebSocketService.off('session_request');
+        WebSocketService.off('session_accepted');
+        WebSocketService.off('session_rejected');
+        WebSocketService.off('session_completed');
+        WebSocketService.off('session_closed');
+        WebSocketService.off('pending_sessions');
+        WebSocketService.off('incomplete_sessions');
     }
 
     /**
@@ -138,8 +294,6 @@ export class AuthService {
             // Generar claves DH efímeras
             const { publicKey: ephemeralPublic, privateKey: ephemeralPrivate } =
                 await this.cryptoUtils.generateEphemeralDhKeys();
-
-            console.log(this.currentUser);
 
             // Cargar clave RSA privada para firmar
             const { rsaPrivate } = await this.keyStorage.loadPrivateKeys(this.currentUser.username);
@@ -327,6 +481,96 @@ export class AuthService {
     }
 
     /**
+     * Rechaza una sesión pendiente
+     * @param {string} sessionId - ID de la sesión
+     * @returns {Promise<Object>} - Respuesta del servidor
+     */
+    async rejectSession(sessionId) {
+        try {
+            if (!this.token || !this.currentUser) {
+                throw new Error('No hay sesión de usuario activa');
+            }
+
+            const response = await axios.post(
+                `${this.apiUrl}/reject_session/${sessionId}`,
+                {},
+                {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
+                    }
+                }
+            );
+
+            return response.data;
+        } catch (error) {
+            console.error('Error al rechazar sesión:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Cancela una sesión pendiente
+     * @param {string} sessionId - ID de la sesión
+     * @returns {Promise<Object>} - Respuesta del servidor
+     */
+    async cancelSession(sessionId) {
+        try {
+            if (!this.token || !this.currentUser) {
+                throw new Error('No hay sesión de usuario activa');
+            }
+
+            const response = await axios.post(
+                `${this.apiUrl}/cancel_session/${sessionId}`,
+                {},
+                {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
+                    }
+                }
+            );
+
+            // Eliminar el directorio de la sesión
+            await this.keyStorage.deleteSessionDir(
+                this.currentUser.username,
+                sessionId
+            );
+
+            return response.data;
+        } catch (error) {
+            console.error('Error al cancelar sesión:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Cierra una sesión activa
+     * @param {string} sessionId - ID de la sesión
+     * @returns {Promise<Object>} - Respuesta del servidor
+     */
+    async closeSession(sessionId) {
+        try {
+            if (!this.token || !this.currentUser) {
+                throw new Error('No hay sesión de usuario activa');
+            }
+
+            const response = await axios.post(
+                `${this.apiUrl}/close_session/${sessionId}`,
+                {},
+                {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
+                    }
+                }
+            );
+
+            return response.data;
+        } catch (error) {
+            console.error('Error al cerrar sesión:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Obtiene las sesiones pendientes del usuario del usuario si es receptor
      * @returns {Promise<Object>} - Lista de sesiones pendientes
      */
@@ -442,7 +686,6 @@ export class AuthService {
         }
     }
 
-
     /**
      * Obtiene información de un sesión por su ID
      * @param {number} sessionId - Id de la Sesión
@@ -491,59 +734,39 @@ export class AuthService {
         }
     }
 
-     /**
-     * Cancela una sesión iniciada si esta pendiente
-     * @param {string} sessionId - ID de la sesión
-     * @returns {Promise<Object>} - Información de la sesión completada
+    /**
+     * Verifica y completa sesiones incompletas
      */
-    async cancelSession(sessionId) {
+    async checkAndCompleteSessions() {
         try {
-            if (!this.token) {
-                throw new Error('No hay token de autenticación');
-            }
-
-            const response = await axios.post(`${this.apiUrl}/cancel_session/${sessionId}`, {}, // cuerpo vacío, o con datos si necesitas
-                {
-                    headers: {
-                        'Authorization': `Bearer ${this.token}`
+            const incompleteSessions = await this.getIncompleteSessions();
+            
+            if (incompleteSessions && incompleteSessions.incomplete_sessions.length > 0) {
+                for (const session of incompleteSessions.incomplete_sessions) {
+                    try {
+                        const result = await this.completeSession(session.session_id);
+                        console.log(`Sesión ${session.session_id} completada correctamente`, result);
+                    } catch (completeError) {
+                        console.error(`Error completando sesión ${session.session_id}:`, completeError);
                     }
                 }
-            );
-
-            // Elininar el directorio de la sesión
-            await this.keyStorage.deleteSessionDir(
-                this.currentUser.username,
-                sessionId
-            );
-
-            return response.data;
-        } catch (error) {
-            console.error('Error al buscar usuarios:', error);
-            throw error;
-        }
-    }
-
-    async checkAndCompleteSessions() {
-      try {
-        const incompleteSessions = await this.getIncompleteSessions();
-        console.log(incompleteSessions)
-        if (incompleteSessions && incompleteSessions.incomplete_sessions.length > 0) {
-          for (const session of incompleteSessions.incomplete_sessions) {
-            try {
-              const result = await this.completeSession(session.session_id);
-              console.log(`Sesión ${session.session_id} completada correctamente`, result);
-            } catch (completeError) {
-              console.error(`Error completando sesión ${session.session_id}:`, completeError);
+            } else {
+                console.log("No hay sesiones incompletas para completar.");
             }
-          }
-        } else {
-          console.log("No hay sesiones incompletas para completar.");
+        } catch (error) {
+            console.error("Error obteniendo sesiones incompletas:", error);
         }
-      } catch (error) {
-        console.error("Error obteniendo sesiones incompletas:", error);
-      }
     }
 
+    /**
+     * Verifica si un usuario está en línea
+     * @param {number} userId - ID del usuario
+     * @returns {boolean} - true si el usuario está en línea
+     */
+    isUserOnline(userId) {
+        return WebSocketService.isUserOnline(userId);
+    }
 }
 
-export default new AuthService();  // Exporta una instancia ya creada
+export default new AuthService();
+
