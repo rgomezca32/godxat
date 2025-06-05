@@ -1,4 +1,4 @@
-// message_service.js modificado
+// message_service.js corregido
 import axios from 'axios';
 import { KeyStorage } from './key_storage';
 import { CryptoUtils } from './crypto_utils';
@@ -19,6 +19,7 @@ export class MessageService {
         this.messageCallbacks = new Map(); // Para callbacks de mensajes
         this.messageListeners = new Map(); // Para listeners de mensajes por sesión
         this.typingDebounceTimers = new Map(); // Para debounce de notificaciones de escritura
+        this.activeSessionId = null; // Para rastrear la sesión activa actualmente
     }
 
     /**
@@ -47,6 +48,15 @@ export class MessageService {
     }
 
     /**
+     * Establece la sesión activa actual
+     * @param {string} sessionId - ID de la sesión activa
+     */
+    setActiveSession(sessionId) {
+        this.activeSessionId = sessionId;
+        console.log(`Sesión activa establecida: ${sessionId}`);
+    }
+
+    /**
      * Maneja la notificación de nuevo mensaje
      * @param {object} data - Datos del mensaje
      */
@@ -68,9 +78,23 @@ export class MessageService {
                 const listeners = this.messageListeners.get(data.session_id);
                 listeners.forEach(callback => {
                     try {
-                        callback(messages);
+                        // Pasar el ID de la sesión y un flag indicando si es la sesión activa
+                        const isActiveSession = this.activeSessionId === data.session_id;
+                        callback(messages, data.session_id, isActiveSession);
                     } catch (error) {
                         console.error('Error en callback de mensaje:', error);
+                    }
+                });
+            }
+
+            // Notificar a todos los listeners de nuevos mensajes (para actualizar la lista de conversaciones)
+            if (this.messageListeners.has('all_messages')) {
+                const listeners = this.messageListeners.get('all_messages');
+                listeners.forEach(callback => {
+                    try {
+                        callback(data.session_id);
+                    } catch (error) {
+                        console.error('Error en callback de todos los mensajes:', error);
                     }
                 });
             }
@@ -295,7 +319,7 @@ export class MessageService {
 
     /**
      * Registra un listener para mensajes de una sesión específica
-     * @param {string} sessionId - ID de la sesión
+     * @param {string} sessionId - ID de la sesión o 'all_messages' para todos los mensajes
      * @param {Function} callback - Función a llamar cuando hay nuevos mensajes
      * @returns {Function} - Función para eliminar el listener
      */
@@ -361,6 +385,7 @@ export class MessageService {
         this.processedNonces.clear();
         this.messageCallbacks.clear();
         this.messageListeners.clear();
+        this.activeSessionId = null;
 
         // Limpiar timers de debounce
         this.typingDebounceTimers.forEach(timer => clearTimeout(timer));

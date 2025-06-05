@@ -184,6 +184,39 @@ class ConnectionManager:
             # Actualizar timestamp en Redis
             redis_client.setex(f"user:online:{user_id}", self.active_expiration, datetime.now(timezone.utc).isoformat())
 
+    async def get_online_users_for_user(self, user_id: int) -> List[Dict]:
+        """Obtiene la lista de usuarios en línea relacionados con un usuario específico"""
+        db = SessionLocal()
+        try:
+            # Buscar sesiones activas donde el usuario es participante
+            sessions = db.query(KeySession).filter(
+                ((KeySession.initiator_id == user_id) | (KeySession.receiver_id == user_id)),
+                KeySession.status == "active"
+            ).all()
+
+            # Obtener IDs de usuarios relacionados
+            related_users = set()
+            for session in sessions:
+                if session.initiator_id == user_id:
+                    related_users.add(session.receiver_id)
+                else:
+                    related_users.add(session.initiator_id)
+
+            # Verificar estado en línea y preparar respuesta
+            online_users = []
+            for related_id in related_users:
+                if self.is_user_online(related_id):
+                    user = db.query(User).filter(User.id == related_id).first()
+                    if user:
+                        online_users.append({
+                            "user_id": user.id,
+                            "username": user.username
+                        })
+
+            return online_users
+        finally:
+            db.close()
+
 
 # Instancia global del gestor de conexiones
 manager = ConnectionManager()
@@ -328,6 +361,15 @@ async def websocket_endpoint(websocket: WebSocket):
                                 "timestamp": datetime.now(timezone.utc).isoformat()
                             }, recipient_id)
 
+                elif event_type == "get_online_users":
+                    # Nuevo evento para solicitar usuarios en línea
+                    online_users = await manager.get_online_users_for_user(user_id)
+                    await websocket.send_text(json.dumps({
+                        "event": "online_users_update",
+                        "data": {"users": online_users},
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }))
+
         finally:
             db.close()
 
@@ -402,29 +444,15 @@ async def send_initial_state(websocket: WebSocket, user: User, db: Session):
                 }))
 
         # 3. Enviar estado de usuarios en conversaciones activas
-        active_sessions = db.query(KeySession).filter(
-            ((KeySession.initiator_id == user.id) | (KeySession.receiver_id == user.id)),
-            KeySession.status == "active"
-        ).all()
+        # Mejorado: Obtener todos los usuarios en línea relacionados con este usuario
+        online_users = await manager.get_online_users_for_user(user.id)
 
-        if active_sessions:
-            online_users = []
-            for session in active_sessions:
-                peer_id = session.receiver_id if session.initiator_id == user.id else session.initiator_id
-                if manager.is_user_online(peer_id):
-                    peer = db.query(User).filter(User.id == peer_id).first()
-                    if peer:
-                        online_users.append({
-                            "user_id": peer_id,
-                            "username": peer.username
-                        })
-
-            if online_users:
-                await websocket.send_text(json.dumps({
-                    "event": "online_users",
-                    "data": {"users": online_users},
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }))
+        if online_users:
+            await websocket.send_text(json.dumps({
+                "event": "online_users",
+                "data": {"users": online_users},
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }))
 
     except Exception as e:
         logger.error(f"Error al enviar estado inicial: {str(e)}")
@@ -515,6 +543,19 @@ async def notify_session_update(session: KeySession, event_type: str, db: Sessio
             }
             await manager.send_personal_message(session_data, session.receiver_id)
 
+            # También notificar al iniciador para confirmar que la sesión está completa
+            initiator_data = {
+                "event": "session_completion_confirmed",
+                "data": {
+                    "session_id": session.session_id,
+                    "receiver_id": session.receiver_id,
+                    "receiver_username": db.query(User).filter(User.id == session.receiver_id).first().username,
+                    "updated_at": session.updated_at.isoformat()
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            await manager.send_personal_message(initiator_data, session.initiator_id)
+
         elif event_type == "session_closed":
             # Notificar a ambos usuarios que la sesión fue cerrada
             session_data = {
@@ -545,7 +586,7 @@ async def check_inactive_users():
 
             for key in active_keys:
                 # Extraer user_id de la clave
-                user_id = int(key.split(":")[-1])
+                user_id = int(key.decode('utf-8').split(":")[-1])
 
                 # Verificar si el usuario tiene conexiones activas
                 if user_id not in manager.active_users:
@@ -562,5 +603,4 @@ async def check_inactive_users():
 
         except Exception as e:
             logger.error(f"Error en tarea de verificación de usuarios inactivos: {str(e)}")
-
 

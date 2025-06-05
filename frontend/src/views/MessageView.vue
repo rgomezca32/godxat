@@ -505,6 +505,7 @@ export default {
         // Registrar listeners para eventos de sesión
         registerSessionEventListeners();
 
+
         await authService.checkAndCompleteSessions();
 
         // Cargar sesiones pendientes
@@ -679,6 +680,9 @@ export default {
       // Cargar mensajes
       await loadMessages(user.sessionId);
 
+      // Establecer esta sesión como la activa en el servicio de mensajes
+      messageService.setActiveSession(user.sessionId);
+
       // Registrar listener para mensajes de esta sesión
       registerMessageListener(user.sessionId);
 
@@ -824,18 +828,30 @@ export default {
       // Listener para sesiones rechazadas
       const sessionRejectedListener = authService.onSessionEvent('session_rejected', () => {
         loadOutgoingPendingSessions();
+        loadConversations();
       });
       sessionEventListeners.push(sessionRejectedListener);
 
       // Listener para sesiones completadas
       const sessionCompletedListener = authService.onSessionEvent('session_completed', () => {
+        checkAndCompleteSessions();
         loadActiveSessions();
+        loadConversations();
       });
       sessionEventListeners.push(sessionCompletedListener);
+
+      // Listener para sesiones completadas
+      const sessionCompletedConfirmedListener = authService.onSessionEvent('session_completion_confirmed', () => {
+        checkAndCompleteSessions();
+        loadActiveSessions();
+        loadConversations();
+      });
+      sessionEventListeners.push(sessionCompletedConfirmedListener);
 
       // Listener para sesiones cerradas
       const sessionClosedListener = authService.onSessionEvent('session_closed', (data) => {
         loadActiveSessions();
+        loadConversations();
         if (selectedUser.value && selectedUser.value.sessionId === data.session_id) {
           selectedUser.value = null;
         }
@@ -853,16 +869,23 @@ export default {
       });
 
       // Registrar nuevo listener
-      const removeListener = messageService.listenForMessages(sessionId, async () => {
-        await loadMessages(sessionId);
+      const removeListener = messageService.listenForMessages(sessionId, async (messagesData, msgSessionId, isActiveSession) => {
+        // Solo actualizar los mensajes si es la sesión activa actualmente seleccionada
+        if (isActiveSession && selectedUser.value && selectedUser.value.sessionId === msgSessionId) {
+          await loadMessages(msgSessionId);
 
-        // Desplazar al final de los mensajes
-        await nextTick();
-        if (messagesContainer.value) {
-          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-        }
-        if (mobileMessagesContainer.value) {
-          mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
+          // Desplazar al final de los mensajes
+          await nextTick();
+          if (messagesContainer.value) {
+            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+          }
+          if (mobileMessagesContainer.value) {
+            mobileMessagesContainer.value.scrollTop = mobileMessagesContainer.value.scrollHeight;
+          }
+        } else {
+          // Si no es la sesión activa, solo actualizar el contador de mensajes no leídos
+          // y la información de la última conversación
+          await loadConversations();
         }
       });
 
@@ -885,6 +908,16 @@ export default {
 
       // Limpiar listeners de eventos de sesión
       sessionEventListeners.forEach(removeListener => removeListener());
+    };
+
+    // Función auxiliar para cargar sesiones pendientes enviadas
+    const checkAndCompleteSessions = async () => {
+      try {
+        const outPendingSessions = await authService.checkAndCompleteSessions();
+        outgoingPendingSessions.value = outPendingSessions.out_pending_sessions || [];
+      } catch (error) {
+        console.error('Error al verificar y completar sesiones:', error);
+      }
     };
 
     // Función auxiliar para cargar sesiones pendientes enviadas

@@ -1,4 +1,4 @@
-// auth_service.js modificado
+// auth_service.js corregido
 import axios from 'axios';
 import { KeyStorage } from './key_storage';
 import { CryptoUtils } from './crypto_utils';
@@ -16,6 +16,7 @@ export class AuthService {
         this.token = localStorage.getItem('token') || null;
         this.currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
         this.sessionListeners = new Map(); // Para listeners de eventos de sesión
+        this.sessionCompletionInProgress = new Set(); // Para evitar completar la misma sesión múltiples veces
     }
 
     /**
@@ -32,22 +33,25 @@ export class AuthService {
     registerWebSocketHandlers() {
         // Manejar solicitudes de sesión
         WebSocketService.on('session_request', this.handleSessionRequest.bind(this));
-        
+
         // Manejar aceptaciones de sesión
         WebSocketService.on('session_accepted', this.handleSessionAccepted.bind(this));
-        
+
         // Manejar rechazos de sesión
         WebSocketService.on('session_rejected', this.handleSessionRejected.bind(this));
-        
+
         // Manejar completado de sesión
         WebSocketService.on('session_completed', this.handleSessionCompleted.bind(this));
-        
+
+        // Manejar confirmación de completado de sesión
+        WebSocketService.on('session_completion_confirmed', this.handleSessionCompletionConfirmed.bind(this));
+
         // Manejar cierre de sesión
         WebSocketService.on('session_closed', this.handleSessionClosed.bind(this));
-        
+
         // Manejar sesiones pendientes iniciales
         WebSocketService.on('pending_sessions', this.handlePendingSessions.bind(this));
-        
+
         // Manejar sesiones incompletas iniciales
         WebSocketService.on('incomplete_sessions', this.handleIncompleteSessions.bind(this));
     }
@@ -57,6 +61,7 @@ export class AuthService {
      * @param {object} data - Datos de la solicitud
      */
     handleSessionRequest(data) {
+        console.log('Solicitud de sesión recibida:', data);
         this.notifySessionListeners('session_request', data);
     }
 
@@ -66,13 +71,42 @@ export class AuthService {
      */
     async handleSessionAccepted(data) {
         try {
-            // Completar la sesión automáticamente
-            await this.completeSession(data.session_id);
-            
-            // Notificar a los listeners
+            console.log('Sesión aceptada:', data);
+
+            // Notificar a los listeners primero para actualizar la UI inmediatamente
             this.notifySessionListeners('session_accepted', data);
+
+            // Evitar completar la misma sesión múltiples veces
+            if (this.sessionCompletionInProgress.has(data.session_id)) {
+                console.log(`Completado de sesión ${data.session_id} ya en progreso, ignorando duplicado`);
+                return;
+            }
+
+            this.sessionCompletionInProgress.add(data.session_id);
+
+            // Completar la sesión automáticamente
+            try {
+                await this.completeSession(data.session_id);
+                console.log(`Sesión ${data.session_id} completada con éxito`);
+
+                // Notificar a los listeners que la sesión ha sido completada
+                this.notifySessionListeners('session_completion_confirmed', {
+                    session_id: data.session_id,
+                    receiver_id: data.receiver_id,
+                    receiver_username: data.receiver_username,
+                    updated_at: new Date().toISOString()
+                });
+
+                // Actualizar las sesiones activas
+                await this.getActiveSessions();
+            } catch (error) {
+                console.error(`Error al completar sesión ${data.session_id}:`, error);
+            } finally {
+                // Eliminar de la lista de sesiones en progreso
+                this.sessionCompletionInProgress.delete(data.session_id);
+            }
         } catch (error) {
-            console.error('Error al completar sesión aceptada:', error);
+            console.error('Error al manejar aceptación de sesión:', error);
         }
     }
 
@@ -81,6 +115,7 @@ export class AuthService {
      * @param {object} data - Datos del rechazo
      */
     handleSessionRejected(data) {
+        console.log('Sesión rechazada:', data);
         this.notifySessionListeners('session_rejected', data);
     }
 
@@ -88,8 +123,24 @@ export class AuthService {
      * Maneja la notificación de completado de sesión
      * @param {object} data - Datos del completado
      */
-    handleSessionCompleted(data) {
+    async handleSessionCompleted(data) {
+        console.log('Sesión completada:', data);
         this.notifySessionListeners('session_completed', data);
+
+        // Actualizar las sesiones activas
+        await this.getActiveSessions();
+    }
+
+    /**
+     * Maneja la confirmación de completado de sesión
+     * @param {object} data - Datos de la confirmación
+     */
+    async handleSessionCompletionConfirmed(data) {
+        console.log('Confirmación de sesión completada:', data);
+        this.notifySessionListeners('session_completion_confirmed', data);
+
+        // Actualizar las sesiones activas
+        await this.getActiveSessions();
     }
 
     /**
@@ -97,6 +148,7 @@ export class AuthService {
      * @param {object} data - Datos del cierre
      */
     handleSessionClosed(data) {
+        console.log('Sesión cerrada:', data);
         this.notifySessionListeners('session_closed', data);
     }
 
@@ -105,6 +157,7 @@ export class AuthService {
      * @param {object} data - Datos de sesiones pendientes
      */
     handlePendingSessions(data) {
+        console.log('Sesiones pendientes recibidas:', data);
         this.notifySessionListeners('pending_sessions', data);
     }
 
@@ -113,7 +166,51 @@ export class AuthService {
      * @param {object} data - Datos de sesiones incompletas
      */
     handleIncompleteSessions(data) {
+        console.log('Sesiones incompletas recibidas:', data);
         this.notifySessionListeners('incomplete_sessions', data);
+
+        // Intentar completar sesiones incompletas automáticamente
+        if (data.sessions && Array.isArray(data.sessions)) {
+            this.processIncompleteSessions(data.sessions);
+        }
+    }
+
+    /**
+     * Procesa sesiones incompletas para intentar completarlas
+     * @param {Array} sessions - Lista de sesiones incompletas
+     */
+    async processIncompleteSessions(sessions) {
+        for (const session of sessions) {
+            try {
+                // Evitar completar la misma sesión múltiples veces
+                if (this.sessionCompletionInProgress.has(session.session_id)) {
+                    console.log(`Completado de sesión ${session.session_id} ya en progreso, ignorando duplicado`);
+                    continue;
+                }
+
+                this.sessionCompletionInProgress.add(session.session_id);
+
+                try {
+                    await this.completeSession(session.session_id);
+                    console.log(`Sesión ${session.session_id} completada con éxito`);
+
+                    // Notificar a los listeners que la sesión ha sido completada
+                    this.notifySessionListeners('session_completion_confirmed', {
+                        session_id: session.session_id,
+                        receiver_id: session.receiver_id,
+                        receiver_username: session.receiver_username,
+                        updated_at: new Date().toISOString()
+                    });
+                } catch (error) {
+                    console.error(`Error al completar sesión ${session.session_id}:`, error);
+                } finally {
+                    // Eliminar de la lista de sesiones en progreso
+                    this.sessionCompletionInProgress.delete(session.session_id);
+                }
+            } catch (error) {
+                console.error(`Error al procesar sesión incompleta ${session.session_id}:`, error);
+            }
+        }
     }
 
     /**
@@ -144,9 +241,9 @@ export class AuthService {
         if (!this.sessionListeners.has(eventType)) {
             this.sessionListeners.set(eventType, new Set());
         }
-        
+
         this.sessionListeners.get(eventType).add(callback);
-        
+
         // Devolver función para eliminar el listener
         return () => {
             if (this.sessionListeners.has(eventType)) {
@@ -234,7 +331,7 @@ export class AuthService {
             if (!this.token) {
                 throw new Error('No hay token de autenticación');
             }
-            
+
             const response = await axios.get(`${this.apiUrl}/get_user/me`, {
                 headers: {
                     'Authorization': `Bearer ${this.token}`
@@ -257,21 +354,23 @@ export class AuthService {
     logout() {
         // Desconectar WebSocket
         WebSocketService.logout();
-        
+
         // Limpiar datos de sesión
         this.token = null;
         this.currentUser = null;
         localStorage.removeItem('token');
         localStorage.removeItem('currentUser');
-        
-        // Limpiar listeners
+
+        // Limpiar listeners y estado
         this.sessionListeners.clear();
-        
+        this.sessionCompletionInProgress.clear();
+
         // Eliminar manejadores de eventos WebSocket
         WebSocketService.off('session_request');
         WebSocketService.off('session_accepted');
         WebSocketService.off('session_rejected');
         WebSocketService.off('session_completed');
+        WebSocketService.off('session_completion_confirmed');
         WebSocketService.off('session_closed');
         WebSocketService.off('pending_sessions');
         WebSocketService.off('incomplete_sessions');
@@ -736,25 +835,22 @@ export class AuthService {
 
     /**
      * Verifica y completa sesiones incompletas
+     * @returns {Promise<Object>} - Resultado de la operación
      */
     async checkAndCompleteSessions() {
         try {
             const incompleteSessions = await this.getIncompleteSessions();
-            
+
             if (incompleteSessions && incompleteSessions.incomplete_sessions.length > 0) {
-                for (const session of incompleteSessions.incomplete_sessions) {
-                    try {
-                        const result = await this.completeSession(session.session_id);
-                        console.log(`Sesión ${session.session_id} completada correctamente`, result);
-                    } catch (completeError) {
-                        console.error(`Error completando sesión ${session.session_id}:`, completeError);
-                    }
-                }
+                await this.processIncompleteSessions(incompleteSessions.incomplete_sessions);
             } else {
                 console.log("No hay sesiones incompletas para completar.");
             }
+
+            return await this.getOutComingPendingSessions();
         } catch (error) {
-            console.error("Error obteniendo sesiones incompletas:", error);
+            console.error("Error verificando y completando sesiones:", error);
+            throw error;
         }
     }
 

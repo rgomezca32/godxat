@@ -1,4 +1,4 @@
-// websocket_service.js
+// websocket_service.js mejorado
 import { ref, reactive } from 'vue';
 
 /**
@@ -7,7 +7,7 @@ import { ref, reactive } from 'vue';
 export class WebSocketService {
     constructor() {
         this.apiUrl = process.env.VUE_APP_API_URL || '';
-        this.wsUrl = process.env.VUE_APP_WS_URL;
+        this.wsUrl = this.apiUrl.replace(/^http/, 'ws') + '/ws';
         this.socket = null;
         this.token = null;
         this.currentUser = null;
@@ -21,6 +21,7 @@ export class WebSocketService {
         this.pendingMessages = [];
         this.onlineUsers = reactive(new Set());
         this.typingUsers = reactive(new Map()); // Map de session_id -> {user_id, timestamp}
+        this.onlineCheckInterval = null; // Intervalo para verificar usuarios en línea
     }
 
     /**
@@ -81,6 +82,9 @@ export class WebSocketService {
         // Configurar ping periódico
         this.startPingInterval();
 
+        // Configurar verificación periódica de usuarios en línea
+        this.startOnlineCheckInterval();
+
         // Enviar mensajes pendientes
         this.sendPendingMessages();
     }
@@ -105,6 +109,8 @@ export class WebSocketService {
 
                 case 'auth_success':
                     console.log('Autenticación WebSocket exitosa');
+                    // Solicitar lista de usuarios en línea después de autenticación exitosa
+                    this.requestOnlineUsers();
                     break;
 
                 case 'user_online':
@@ -113,6 +119,16 @@ export class WebSocketService {
 
                 case 'user_offline':
                     this.onlineUsers.delete(data.user_id);
+                    break;
+
+                case 'online_users':
+                    // Actualizar la lista completa de usuarios en línea
+                    this.onlineUsers.clear();
+                    if (data.users && Array.isArray(data.users)) {
+                        data.users.forEach(user => {
+                            this.onlineUsers.add(user.user_id);
+                        });
+                    }
                     break;
 
                 case 'user_typing':
@@ -130,21 +146,51 @@ export class WebSocketService {
                     }, 3000);
                     break;
 
+                case 'session_accepted':
+                    // Registrar en log para depuración
+                    console.log('Evento session_accepted recibido:', data);
+                    // Llamar a los manejadores registrados
+                    this.callEventHandlers(eventType, data);
+                    break;
+
+                case 'session_completed':
+                    // Registrar en log para depuración
+                    console.log('Evento session_completed recibido:', data);
+                    // Llamar a los manejadores registrados
+                    this.callEventHandlers(eventType, data);
+                    break;
+
+                case 'session_completion_confirmed':
+                    // Registrar en log para depuración
+                    console.log('Evento session_completion_confirmed recibido:', data);
+                    // Llamar a los manejadores registrados
+                    this.callEventHandlers(eventType, data);
+                    break;
+
                 default:
                     // Llamar a los manejadores registrados para este tipo de evento
-                    if (this.eventHandlers[eventType]) {
-                        this.eventHandlers[eventType].forEach(handler => {
-                            try {
-                                handler(data);
-                            } catch (handlerError) {
-                                console.error(`Error en manejador de evento ${eventType}:`, handlerError);
-                            }
-                        });
-                    }
+                    this.callEventHandlers(eventType, data);
                     break;
             }
         } catch (error) {
             console.error('Error al procesar mensaje WebSocket:', error);
+        }
+    }
+
+    /**
+     * Llama a los manejadores registrados para un tipo de evento
+     * @param {string} eventType - Tipo de evento
+     * @param {object} data - Datos del evento
+     */
+    callEventHandlers(eventType, data) {
+        if (this.eventHandlers[eventType]) {
+            this.eventHandlers[eventType].forEach(handler => {
+                try {
+                    handler(data);
+                } catch (handlerError) {
+                    console.error(`Error en manejador de evento ${eventType}:`, handlerError);
+                }
+            });
         }
     }
 
@@ -157,8 +203,9 @@ export class WebSocketService {
         this.isConnected.value = false;
         this.isConnecting.value = false;
 
-        // Limpiar ping interval
+        // Limpiar intervalos
         this.stopPingInterval();
+        this.stopOnlineCheckInterval();
 
         // Intentar reconectar si no fue un cierre normal
         if (event.code !== 1000) {
@@ -217,6 +264,35 @@ export class WebSocketService {
             clearInterval(this.pingInterval);
             this.pingInterval = null;
         }
+    }
+
+    /**
+     * Inicia el intervalo de verificación de usuarios en línea
+     */
+    startOnlineCheckInterval() {
+        this.stopOnlineCheckInterval();
+        this.onlineCheckInterval = setInterval(() => {
+            if (this.isConnected.value) {
+                this.requestOnlineUsers();
+            }
+        }, 60000); // 60 segundos
+    }
+
+    /**
+     * Detiene el intervalo de verificación de usuarios en línea
+     */
+    stopOnlineCheckInterval() {
+        if (this.onlineCheckInterval) {
+            clearInterval(this.onlineCheckInterval);
+            this.onlineCheckInterval = null;
+        }
+    }
+
+    /**
+     * Solicita la lista de usuarios en línea
+     */
+    requestOnlineUsers() {
+        this.sendEvent('get_online_users', {});
     }
 
     /**
@@ -357,6 +433,7 @@ export class WebSocketService {
      */
     disconnect() {
         this.stopPingInterval();
+        this.stopOnlineCheckInterval();
 
         if (this.socket) {
             this.socket.close(1000, 'Cierre normal');
